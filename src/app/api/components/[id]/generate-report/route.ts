@@ -2,11 +2,11 @@ import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import type { ResponseInputContent } from "openai/resources/responses/responses";
 import { reportSystemPrompt, jsonSchema, technicalReportSchema } from "@/lib/ai/report-schema";
+import { aiReadableMimeTypes, isTechnicalDocument } from "@/lib/files";
 import { createClient } from "@/lib/supabase/server";
 import type { ComponentFile, ComponentProject } from "@/lib/types";
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
-const SUPPORTED_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "application/pdf"]);
 
 function getOpenAI() {
   if (!process.env.OPENAI_API_KEY) {
@@ -20,7 +20,7 @@ async function fileToContentPart(
   file: ComponentFile,
   data: Blob,
 ): Promise<ResponseInputContent | null> {
-  if (!SUPPORTED_TYPES.has(file.file_type)) {
+  if (!aiReadableMimeTypes.has(file.file_type)) {
     return null;
   }
 
@@ -92,12 +92,16 @@ Nome interno progetto: ${(component as ComponentProject).title}
 Note tecniche dell'utente:
 ${(component as ComponentProject).notes || "Nessuna nota tecnica fornita."}
 
-File allegati: ${(files as ComponentFile[] | null)?.map((file) => `${file.file_name} (${file.file_type})`).join(", ") || "nessuno"}.
+File allegati: ${(files as ComponentFile[] | null)?.map((file) => `${file.file_name} (${isTechnicalDocument(file.file_name) ? "documentazione CAD/3D non analizzata in questa versione" : file.file_type})`).join(", ") || "nessuno"}.
 `.trim(),
       },
     ];
 
     for (const file of (files as ComponentFile[] | null) ?? []) {
+      if (!aiReadableMimeTypes.has(file.file_type)) {
+        continue;
+      }
+
       const { data, error } = await supabase.storage.from("component-files").download(file.file_path);
 
       if (error || !data) {

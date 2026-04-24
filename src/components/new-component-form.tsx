@@ -4,8 +4,11 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { UploadCloud } from "lucide-react";
 import { createClient } from "@/lib/supabase/browser";
-
-const acceptedTypes = ["image/png", "image/jpeg", "image/webp", "application/pdf"];
+import {
+  getStoredContentType,
+  isSupportedUpload,
+  supportedUploadExtensions,
+} from "@/lib/files";
 
 export function NewComponentForm({ userId }: { userId: string }) {
   const router = useRouter();
@@ -22,7 +25,7 @@ export function NewComponentForm({ userId }: { userId: string }) {
     setLoading(true);
 
     const selectedFiles = Array.from(files ?? []);
-    const invalidFile = selectedFiles.find((file) => !acceptedTypes.includes(file.type));
+    const invalidFile = selectedFiles.find((file) => !isSupportedUpload(file.name));
 
     if (invalidFile) {
       setError(`Formato non supportato: ${invalidFile.name}`);
@@ -45,9 +48,10 @@ export function NewComponentForm({ userId }: { userId: string }) {
     for (const file of selectedFiles) {
       const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
       const path = `${userId}/${component.id}/${crypto.randomUUID()}-${safeName}`;
+      const contentType = getStoredContentType(file);
       const { error: uploadError } = await supabase.storage
         .from("component-files")
-        .upload(path, file, { contentType: file.type });
+        .upload(path, file, { contentType });
 
       if (uploadError) {
         setError(uploadError.message);
@@ -60,7 +64,7 @@ export function NewComponentForm({ userId }: { userId: string }) {
         user_id: userId,
         file_name: file.name,
         file_path: path,
-        file_type: file.type,
+        file_type: contentType,
         file_size: file.size,
       });
 
@@ -101,18 +105,19 @@ export function NewComponentForm({ userId }: { userId: string }) {
       </section>
 
       <section className="panel p-6">
-        <h2 className="mb-5 text-xl font-semibold">Foto e PDF</h2>
+        <h2 className="mb-5 text-xl font-semibold">Documentazione tecnica</h2>
         <label className="flex min-h-64 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-[var(--line)] bg-[#faf9f5] p-6 text-center">
           <UploadCloud aria-hidden size={34} className="mb-4 text-[var(--accent)]" />
-          <span className="font-semibold">Carica immagini o PDF</span>
+          <span className="font-semibold">Carica immagini, PDF o CAD/3D</span>
           <span className="mt-2 text-sm leading-6 text-[var(--muted)]">
-            PNG, JPG, WEBP e PDF. I file restano nel bucket privato Supabase.
+            PNG, JPG, WEBP, PDF, STL, STEP, IGES, Parasolid, OBJ, 3MF, DXF e DWG.
+            I file restano nel bucket privato Supabase.
           </span>
           <input
             className="sr-only"
             type="file"
             multiple
-            accept=".png,.jpg,.jpeg,.webp,.pdf"
+            accept={supportedUploadExtensions.join(",")}
             onChange={(event) => setFiles(event.target.files)}
           />
         </label>

@@ -1,8 +1,9 @@
 import { notFound, redirect } from "next/navigation";
-import { File, FileImage } from "lucide-react";
+import { Box, File, FileImage } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { GenerateReportButton } from "@/components/generate-report-button";
 import { ReportSection } from "@/components/report-section";
+import { isTechnicalDocument } from "@/lib/files";
 import { createClient } from "@/lib/supabase/server";
 import type { AiReportRow, ComponentFile, ComponentProject, TechnicalReport } from "@/lib/types";
 
@@ -69,17 +70,29 @@ export default async function ComponentDetailPage({
           </section>
 
           <section className="panel p-5">
-            <h2 className="mb-4 text-lg font-semibold">File caricati</h2>
+            <h2 className="mb-4 text-lg font-semibold">Documentazione tecnica</h2>
             {files?.length ? (
               <ul className="space-y-3">
                 {(files as ComponentFile[]).map((file) => (
-                  <li key={file.id} className="flex items-center gap-3 rounded-md bg-[#faf9f5] p-3 text-sm">
+                  <li
+                    key={file.id}
+                    className="flex items-center justify-between gap-3 rounded-md bg-[#faf9f5] p-3 text-sm"
+                  >
+                    <span className="flex min-w-0 items-center gap-3">
                     {file.file_type.startsWith("image/") ? (
                       <FileImage aria-hidden size={18} className="text-[var(--accent)]" />
+                    ) : isTechnicalDocument(file.file_name) ? (
+                      <Box aria-hidden size={18} className="text-[var(--accent)]" />
                     ) : (
                       <File aria-hidden size={18} className="text-[var(--accent)]" />
                     )}
                     <span className="break-all">{file.file_name}</span>
+                    </span>
+                    {isTechnicalDocument(file.file_name) ? (
+                      <span className="shrink-0 rounded-full bg-[#e2eee8] px-2 py-1 text-xs font-semibold text-[var(--accent-strong)]">
+                        CAD/3D
+                      </span>
+                    ) : null}
                   </li>
                 ))}
               </ul>

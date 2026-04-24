@@ -7,7 +7,7 @@ Web app Next.js per caricare foto, PDF e note tecniche di un componente meccanic
 - Login e registrazione con Supabase Auth
 - Dashboard componenti/progetti
 - Creazione nuovo componente
-- Upload immagini e PDF su Supabase Storage privato
+- Upload immagini, PDF e file CAD/3D su Supabase Storage privato
 - Campo note tecniche
 - Generazione scheda AI con OpenAI Responses API
 - Separazione obbligatoria tra dati certi, ipotesi e dati mancanti
@@ -85,7 +85,7 @@ Il prompt di sistema in `src/lib/ai/report-schema.ts` impone che il modello:
 - includa sempre `confidence_level` e `confidence_reason`
 - risponda solo in JSON validato da schema
 
-I PDF e le immagini vengono letti dal bucket Supabase, convertiti in base64 e inviati alla Responses API. I file restano privati nello storage.
+I PDF e le immagini vengono letti dal bucket Supabase, convertiti in base64 e inviati alla Responses API. I file CAD/3D (`.stl`, `.step`, `.stp`, `.iges`, `.igs`, `.x_t`, `.x_b`, `.obj`, `.3mf`, `.dxf`, `.dwg`) vengono caricati, salvati e mostrati come documentazione tecnica, ma in questa versione non vengono parsati ne' inviati all'AI come contenuto tecnico. I file restano privati nello storage.
 
 ## Deploy Vercel
 
