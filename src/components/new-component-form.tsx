@@ -1,0 +1,142 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { UploadCloud } from "lucide-react";
+import { createClient } from "@/lib/supabase/browser";
+
+const acceptedTypes = ["image/png", "image/jpeg", "image/webp", "application/pdf"];
+
+export function NewComponentForm({ userId }: { userId: string }) {
+  const router = useRouter();
+  const supabase = createClient();
+  const [title, setTitle] = useState("");
+  const [notes, setNotes] = useState("");
+  const [files, setFiles] = useState<FileList | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setLoading(true);
+
+    const selectedFiles = Array.from(files ?? []);
+    const invalidFile = selectedFiles.find((file) => !acceptedTypes.includes(file.type));
+
+    if (invalidFile) {
+      setError(`Formato non supportato: ${invalidFile.name}`);
+      setLoading(false);
+      return;
+    }
+
+    const { data: component, error: componentError } = await supabase
+      .from("components")
+      .insert({ title, notes, user_id: userId })
+      .select("id")
+      .single();
+
+    if (componentError || !component) {
+      setError(componentError?.message ?? "Impossibile creare il componente.");
+      setLoading(false);
+      return;
+    }
+
+    for (const file of selectedFiles) {
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const path = `${userId}/${component.id}/${crypto.randomUUID()}-${safeName}`;
+      const { error: uploadError } = await supabase.storage
+        .from("component-files")
+        .upload(path, file, { contentType: file.type });
+
+      if (uploadError) {
+        setError(uploadError.message);
+        setLoading(false);
+        return;
+      }
+
+      const { error: fileError } = await supabase.from("component_files").insert({
+        component_id: component.id,
+        user_id: userId,
+        file_name: file.name,
+        file_path: path,
+        file_type: file.type,
+        file_size: file.size,
+      });
+
+      if (fileError) {
+        setError(fileError.message);
+        setLoading(false);
+        return;
+      }
+    }
+
+    router.push(`/components/${component.id}`);
+    router.refresh();
+  }
+
+  return (
+    <form onSubmit={submit} className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+      <section className="panel p-6">
+        <h2 className="mb-5 text-xl font-semibold">Dati iniziali</h2>
+        <label className="mb-5 block">
+          <span className="mb-2 block text-sm font-medium">Nome interno</span>
+          <input
+            className="field"
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            placeholder="Es. Staffa supporto motore"
+            required
+          />
+        </label>
+        <label className="block">
+          <span className="mb-2 block text-sm font-medium">Note tecniche</span>
+          <textarea
+            className="field min-h-72 resize-y leading-6"
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+            placeholder="Inserisci misure note, materiale dichiarato, contesto d'uso, vincoli, difetti visibili o richieste del cliente."
+          />
+        </label>
+      </section>
+
+      <section className="panel p-6">
+        <h2 className="mb-5 text-xl font-semibold">Foto e PDF</h2>
+        <label className="flex min-h-64 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-[var(--line)] bg-[#faf9f5] p-6 text-center">
+          <UploadCloud aria-hidden size={34} className="mb-4 text-[var(--accent)]" />
+          <span className="font-semibold">Carica immagini o PDF</span>
+          <span className="mt-2 text-sm leading-6 text-[var(--muted)]">
+            PNG, JPG, WEBP e PDF. I file restano nel bucket privato Supabase.
+          </span>
+          <input
+            className="sr-only"
+            type="file"
+            multiple
+            accept=".png,.jpg,.jpeg,.webp,.pdf"
+            onChange={(event) => setFiles(event.target.files)}
+          />
+        </label>
+
+        {files?.length ? (
+          <ul className="mt-4 space-y-2 text-sm">
+            {Array.from(files).map((file) => (
+              <li key={`${file.name}-${file.size}`} className="rounded-md bg-[#eeece5] px-3 py-2">
+                {file.name}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+
+        {error ? (
+          <p className="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            {error}
+          </p>
+        ) : null}
+
+        <button className="button button-primary mt-6 w-full" disabled={loading}>
+          {loading ? "Salvataggio..." : "Crea componente"}
+        </button>
+      </section>
+    </form>
+  );
+}
