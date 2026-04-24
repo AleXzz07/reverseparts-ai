@@ -11,6 +11,15 @@ export type ComponentFile = {
   created_at: string;
 };
 
+export type Folder = {
+  id: string;
+  user_id: string;
+  name: string;
+  description: string;
+  created_at: string;
+  updated_at: string;
+};
+
 export type TechnicalReport = {
   component_name: string;
   description: string;
@@ -28,6 +37,7 @@ export type TechnicalReport = {
 export type ComponentProject = {
   id: string;
   user_id: string;
+  folder_id: string | null;
   title: string;
   notes: string;
   status: ComponentStatus;

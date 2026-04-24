@@ -9,11 +9,18 @@ import {
   isSupportedUpload,
   supportedUploadExtensions,
 } from "@/lib/files";
+import type { Folder } from "@/lib/types";
 
-export function NewComponentForm({ userId }: { userId: string }) {
+export function NewComponentForm({
+  userId,
+  folders,
+}: {
+  userId: string;
+  folders: Folder[];
+}) {
   const router = useRouter();
-  const supabase = createClient();
   const [title, setTitle] = useState("");
+  const [folderId, setFolderId] = useState("");
   const [notes, setNotes] = useState("");
   const [files, setFiles] = useState<FileList | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -26,6 +33,7 @@ export function NewComponentForm({ userId }: { userId: string }) {
 
     const selectedFiles = Array.from(files ?? []);
     const invalidFile = selectedFiles.find((file) => !isSupportedUpload(file.name));
+    const supabase = createClient();
 
     if (invalidFile) {
       setError(`Formato non supportato: ${invalidFile.name}`);
@@ -35,7 +43,7 @@ export function NewComponentForm({ userId }: { userId: string }) {
 
     const { data: component, error: componentError } = await supabase
       .from("components")
-      .insert({ title, notes, user_id: userId })
+      .insert({ title, notes, user_id: userId, folder_id: folderId || null })
       .select("id")
       .single();
 
@@ -92,6 +100,21 @@ export function NewComponentForm({ userId }: { userId: string }) {
             placeholder="Es. Staffa supporto motore"
             required
           />
+        </label>
+        <label className="mb-5 block">
+          <span className="mb-2 block text-sm font-medium">Cartella</span>
+          <select
+            className="field"
+            value={folderId}
+            onChange={(event) => setFolderId(event.target.value)}
+          >
+            <option value="">Senza cartella</option>
+            {folders.map((folder) => (
+              <option key={folder.id} value={folder.id}>
+                {folder.name}
+              </option>
+            ))}
+          </select>
         </label>
         <label className="block">
           <span className="mb-2 block text-sm font-medium">Note tecniche</span>

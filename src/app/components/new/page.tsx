@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { NewComponentForm } from "@/components/new-component-form";
 import { createClient } from "@/lib/supabase/server";
+import type { Folder } from "@/lib/types";
 
 export default async function NewComponentPage() {
   const supabase = await createClient();
@@ -11,6 +12,15 @@ export default async function NewComponentPage() {
 
   if (!user) {
     redirect("/login");
+  }
+
+  const { data: folders, error } = await supabase
+    .from("folders")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw new Error(error.message);
   }
 
   return (
@@ -25,7 +35,7 @@ export default async function NewComponentPage() {
           dettaglio del componente, dopo il salvataggio.
         </p>
       </div>
-      <NewComponentForm userId={user.id} />
+      <NewComponentForm userId={user.id} folders={(folders as Folder[]) ?? []} />
     </AppShell>
   );
 }

@@ -11,7 +11,6 @@ type AuthFormProps = {
 
 export function AuthForm({ mode }: AuthFormProps) {
   const router = useRouter();
-  const supabase = createClient();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -23,6 +22,7 @@ export function AuthForm({ mode }: AuthFormProps) {
     setError(null);
     setMessage(null);
     setLoading(true);
+    const supabase = createClient();
 
     const result =
       mode === "login"
@@ -90,6 +90,14 @@ export function AuthForm({ mode }: AuthFormProps) {
           autoComplete={mode === "login" ? "current-password" : "new-password"}
         />
       </label>
+
+      {mode === "login" ? (
+        <div className="mb-6 text-right text-sm">
+          <Link className="font-semibold text-[var(--accent-strong)]" href="/forgot-password">
+            Password dimenticata?
+          </Link>
+        </div>
+      ) : null}
 
       {error ? (
         <p className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">

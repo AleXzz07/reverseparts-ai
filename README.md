@@ -5,8 +5,11 @@ Web app Next.js per caricare foto, PDF e note tecniche di un componente meccanic
 ## Funzioni incluse
 
 - Login e registrazione con Supabase Auth
+- Recupero password con email Supabase Auth
 - Dashboard componenti/progetti
+- Cartelle per organizzare i componenti
 - Creazione nuovo componente
+- Eliminazione componenti con rimozione file Storage e report AI collegati
 - Upload immagini, PDF e file CAD/3D su Supabase Storage privato
 - Campo note tecniche
 - Generazione scheda AI con OpenAI Responses API
@@ -67,12 +70,24 @@ Apri `http://localhost:3000`.
 Lo schema si trova in `supabase/schema.sql` e crea:
 
 - `components`
+- `folders`
 - `component_files`
 - `ai_reports`
 - bucket privato `component-files`
 - policy RLS per isolare i dati per utente
 
 Per un MVP locale puoi disabilitare la conferma email in Supabase Auth oppure configurare il redirect verso `http://localhost:3000/dashboard`.
+
+### Redirect Auth
+
+In Supabase Auth configura gli URL consentiti:
+
+- `http://localhost:3000/dashboard`
+- `http://localhost:3000/update-password`
+- dominio Vercel production, per esempio `https://tuo-progetto.vercel.app/dashboard`
+- dominio Vercel production per reset password, per esempio `https://tuo-progetto.vercel.app/update-password`
+
+Il reset password usa `resetPasswordForEmail` con redirect verso `/update-password`, poi `updateUser` per salvare la nuova password.
 
 ## Regole AI implementate
 

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { FolderPlus, Plus } from "lucide-react";
 import { SignOutButton } from "@/components/sign-out-button";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -11,6 +11,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             REVERSEPARTS
           </Link>
           <nav className="flex items-center gap-3">
+            <Link className="button button-secondary" href="/folders/new">
+              <FolderPlus aria-hidden size={16} />
+              Nuova cartella
+            </Link>
             <Link className="button button-primary" href="/components/new">
               <Plus aria-hidden size={16} />
               Nuovo componente
