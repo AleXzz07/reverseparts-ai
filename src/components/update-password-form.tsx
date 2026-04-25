@@ -60,9 +60,12 @@ export function UpdatePasswordForm() {
   return (
     <form onSubmit={submit} className="panel w-full max-w-md p-8 shadow-sm">
       <div className="mb-8">
-        <p className="mb-2 font-mono text-xs uppercase tracking-wide text-[var(--accent)]">
+        <Link
+          href="/dashboard"
+          className="mb-2 block font-mono text-xs uppercase tracking-wide text-[var(--accent)]"
+        >
           REVERSEPARTS
-        </p>
+        </Link>
         <h1 className="text-3xl font-semibold">Nuova password</h1>
         <p className="mt-3 text-sm leading-6 text-[var(--muted)]">
           Imposta una nuova password per completare il recupero account.
@@ -111,9 +114,12 @@ export function UpdatePasswordForm() {
         {initializing ? "Verifica link..." : loading ? "Aggiornamento..." : "Aggiorna password"}
       </button>
 
-      <p className="mt-5 text-center text-sm">
+      <p className="mt-5 flex justify-center gap-4 text-sm">
         <Link className="font-semibold text-[var(--accent-strong)]" href="/login">
-          Torna al login
+          ← Indietro
+        </Link>
+        <Link className="font-semibold text-[var(--accent-strong)]" href="/dashboard">
+          Dashboard
         </Link>
       </p>
     </form>

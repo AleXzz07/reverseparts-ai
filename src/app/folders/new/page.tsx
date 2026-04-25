@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
+import { BackLink } from "@/components/back-link";
 import { FolderForm } from "@/components/folder-form";
 import { createClient } from "@/lib/supabase/server";
 
@@ -15,6 +16,7 @@ export default async function NewFolderPage() {
 
   return (
     <AppShell>
+      <BackLink />
       <div className="mb-8">
         <p className="mb-2 font-mono text-xs uppercase text-[var(--accent)]">
           Nuova cartella

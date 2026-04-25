@@ -83,7 +83,7 @@ export function NewComponentForm({
       }
     }
 
-    router.push(`/components/${component.id}`);
+    router.push("/dashboard?created=component");
     router.refresh();
   }
 

@@ -54,9 +54,12 @@ export function AuthForm({ mode }: AuthFormProps) {
   return (
     <form onSubmit={submit} className="panel w-full max-w-md p-8 shadow-sm">
       <div className="mb-8">
-        <p className="mb-2 font-mono text-xs uppercase tracking-wide text-[var(--accent)]">
+        <Link
+          href="/dashboard"
+          className="mb-2 block font-mono text-xs uppercase tracking-wide text-[var(--accent)]"
+        >
           REVERSEPARTS
-        </p>
+        </Link>
         <h1 className="text-3xl font-semibold">
           {mode === "login" ? "Accedi" : "Crea account"}
         </h1>

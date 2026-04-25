@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { Box, File, FileImage } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { BackLink } from "@/components/back-link";
 import { GenerateReportButton } from "@/components/generate-report-button";
 import { ReportSection } from "@/components/report-section";
 import { isTechnicalDocument } from "@/lib/files";
@@ -47,6 +48,7 @@ export default async function ComponentDetailPage({
 
   return (
     <AppShell>
+      <BackLink />
       <div className="mb-8 flex flex-col justify-between gap-5 md:flex-row md:items-start">
         <div>
           <p className="mb-2 font-mono text-xs uppercase text-[var(--accent)]">

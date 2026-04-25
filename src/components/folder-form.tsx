@@ -30,7 +30,7 @@ export function FolderForm({ userId }: { userId: string }) {
       return;
     }
 
-    router.push("/dashboard");
+    router.push("/dashboard?created=folder");
     router.refresh();
   }
 

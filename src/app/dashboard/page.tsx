@@ -3,10 +3,16 @@ import { redirect } from "next/navigation";
 import { FileText, Folder, Gauge, Plus } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { DeleteComponentButton } from "@/components/delete-component-button";
+import { DeleteFolderButton } from "@/components/delete-folder-button";
 import { createClient } from "@/lib/supabase/server";
 import type { ComponentProject, Folder as FolderRow } from "@/lib/types";
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ created?: string; deleted?: string }>;
+}) {
+  const params = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -39,6 +45,7 @@ export default async function DashboardPage() {
   }
 
   const hasContent = componentRows.length > 0 || folderRows.length > 0;
+  const message = getDashboardMessage(params);
 
   return (
     <AppShell>
@@ -59,6 +66,12 @@ export default async function DashboardPage() {
         </Link>
       </section>
 
+      {message ? (
+        <div className="mb-6 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-800">
+          {message}
+        </div>
+      ) : null}
+
       {hasContent ? (
         <div className="space-y-6">
           {folderRows.map((folder) => (
@@ -67,6 +80,7 @@ export default async function DashboardPage() {
               title={folder.name}
               description={folder.description}
               components={componentsByFolder.get(folder.id) ?? []}
+              folderId={folder.id}
             />
           ))}
           {unfiledComponents.length ? (
@@ -107,24 +121,41 @@ export default async function DashboardPage() {
 }
 
 function ComponentGroup({
+  folderId,
   title,
   description,
   components,
 }: {
+  folderId?: string;
   title: string;
   description?: string;
   components: ComponentProject[];
 }) {
   return (
     <section className="panel overflow-hidden">
-      <div className="flex items-start gap-3 border-b border-[var(--line)] bg-[#eeece5] px-4 py-4">
-        <Folder aria-hidden size={20} className="mt-0.5 text-[var(--accent)]" />
-        <div>
-          <h2 className="font-semibold">{title}</h2>
-          {description ? (
-            <p className="mt-1 text-sm text-[var(--muted)]">{description}</p>
-          ) : null}
+      <div className="flex items-start justify-between gap-3 border-b border-[var(--line)] bg-[#eeece5] px-4 py-4">
+        <div className="flex items-start gap-3">
+          <Folder aria-hidden size={20} className="mt-0.5 text-[var(--accent)]" />
+          <div>
+            <h2 className="font-semibold">{title}</h2>
+            {description ? (
+              <p className="mt-1 text-sm text-[var(--muted)]">{description}</p>
+            ) : null}
+            {folderId && components.length ? (
+              <p className="mt-2 text-xs text-[var(--warning)]">
+                Se elimini questa cartella, i componenti resteranno nel gruppo
+                Senza cartella.
+              </p>
+            ) : null}
+          </div>
         </div>
+        {folderId ? (
+          <DeleteFolderButton
+            folderId={folderId}
+            folderName={title}
+            componentCount={components.length}
+          />
+        ) : null}
       </div>
       {components.length ? (
         <div>
@@ -173,4 +204,24 @@ function ComponentGroup({
       )}
     </section>
   );
+}
+
+function getDashboardMessage(params: { created?: string; deleted?: string }) {
+  if (params.created === "component") {
+    return "Componente creato correttamente.";
+  }
+
+  if (params.created === "folder") {
+    return "Cartella creata correttamente.";
+  }
+
+  if (params.deleted === "component") {
+    return "Componente eliminato correttamente. File e report collegati sono stati rimossi.";
+  }
+
+  if (params.deleted === "folder") {
+    return "Cartella eliminata correttamente. I componenti sono stati spostati in Senza cartella.";
+  }
+
+  return null;
 }

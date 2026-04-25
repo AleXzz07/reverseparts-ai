@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
+import { BackLink } from "@/components/back-link";
 import { NewComponentForm } from "@/components/new-component-form";
 import { createClient } from "@/lib/supabase/server";
 import type { Folder } from "@/lib/types";
@@ -25,6 +26,7 @@ export default async function NewComponentPage() {
 
   return (
     <AppShell>
+      <BackLink />
       <div className="mb-8">
         <p className="mb-2 font-mono text-xs uppercase text-[var(--accent)]">
           Nuovo componente

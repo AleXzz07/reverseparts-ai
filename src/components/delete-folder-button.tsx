@@ -4,21 +4,26 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Trash2 } from "lucide-react";
 
-export function DeleteComponentButton({
-  componentId,
-  componentTitle,
+export function DeleteFolderButton({
+  folderId,
+  folderName,
+  componentCount,
 }: {
-  componentId: string;
-  componentTitle: string;
+  folderId: string;
+  folderName: string;
+  componentCount: number;
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function deleteComponent() {
-    const confirmed = window.confirm(
-      `Eliminare "${componentTitle}"? Verranno rimossi anche file e schede AI collegati.`,
-    );
+  async function deleteFolder() {
+    const warning =
+      componentCount > 0
+        ? `La cartella contiene ${componentCount} componenti. Verrà eliminata solo la cartella: i componenti resteranno disponibili in "Senza cartella".`
+        : "La cartella non contiene componenti.";
+
+    const confirmed = window.confirm(`Eliminare "${folderName}"?\n\n${warning}`);
 
     if (!confirmed) {
       return;
@@ -27,7 +32,7 @@ export function DeleteComponentButton({
     setError(null);
     setLoading(true);
 
-    const response = await fetch(`/api/components/${componentId}`, {
+    const response = await fetch(`/api/folders/${folderId}`, {
       method: "DELETE",
     });
 
@@ -35,11 +40,11 @@ export function DeleteComponentButton({
 
     if (!response.ok) {
       const payload = (await response.json().catch(() => null)) as { error?: string } | null;
-      setError(payload?.error ?? "Eliminazione non riuscita.");
+      setError(payload?.error ?? "Eliminazione cartella non riuscita.");
       return;
     }
 
-    router.push("/dashboard?deleted=component");
+    router.push("/dashboard?deleted=folder");
     router.refresh();
   }
 
@@ -48,7 +53,7 @@ export function DeleteComponentButton({
       <button
         className="button button-secondary px-3 py-2 text-sm text-[var(--danger)]"
         type="button"
-        onClick={deleteComponent}
+        onClick={deleteFolder}
         disabled={loading}
       >
         <Trash2 aria-hidden size={15} />
