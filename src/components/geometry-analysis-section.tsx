@@ -140,38 +140,23 @@ function GeometryAnalysisCard({ analysis }: { analysis: StlGeometryAnalysis }) {
         </label>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[720px] border-collapse text-sm">
-          <thead>
-            <tr className="border-b border-[var(--line)] text-left text-xs uppercase text-[var(--muted)]">
-              <th className="py-2 pr-3">X</th>
-              <th className="py-2 pr-3">Y</th>
-              <th className="py-2 pr-3">Z</th>
-              <th className="py-2 pr-3">Volume</th>
-              <th className="py-2 pr-3">Area</th>
-              <th className="py-2 pr-3">Triangoli</th>
-              <th className="py-2 pr-3">Unita</th>
-              <th className="py-2">Peso stimato</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr className="font-mono">
-              <td className="py-3 pr-3">{formatNumber(analysis.dimensions?.x)}</td>
-              <td className="py-3 pr-3">{formatNumber(analysis.dimensions?.y)}</td>
-              <td className="py-3 pr-3">{formatNumber(analysis.dimensions?.z)}</td>
-              <td className="py-3 pr-3">{formatNumber(calculated.volumeCm3)} cm3</td>
-              <td className="py-3 pr-3">
-                {formatNumber(calculated.area)} {unit}2
-              </td>
-              <td className="py-3 pr-3">{formatInteger(analysis.triangle_count)}</td>
-              <td className="py-3 pr-3">{unit}</td>
-              <td className="py-3">
-                {formatNumber(calculated.weight.grams)} g /{" "}
-                {formatNumber(calculated.weight.kilograms)} kg
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <MetricCard label="X" value={formatNumber(analysis.dimensions?.x)} unit={unit} />
+        <MetricCard label="Y" value={formatNumber(analysis.dimensions?.y)} unit={unit} />
+        <MetricCard label="Z" value={formatNumber(analysis.dimensions?.z)} unit={unit} />
+        <MetricCard label="Volume" value={formatNumber(calculated.volumeCm3)} unit="cm3" />
+        <MetricCard label="Area" value={formatNumber(calculated.area)} unit={`${unit}2`} />
+        <MetricCard
+          label="Triangoli"
+          value={formatInteger(analysis.triangle_count)}
+          unit="facce"
+        />
+        <MetricCard
+          label="Peso stimato"
+          value={formatNumber(calculated.weight.grams)}
+          unit={`g / ${formatNumber(calculated.weight.kilograms)} kg`}
+          emphasized
+        />
       </div>
 
       <p className="mt-3 text-xs text-[var(--muted)]">
@@ -180,6 +165,37 @@ function GeometryAnalysisCard({ analysis }: { analysis: StlGeometryAnalysis }) {
         {saveState === "saved" ? " Valori salvati." : null}
         {saveState === "error" ? " Errore durante il salvataggio." : null}
       </p>
+    </div>
+  );
+}
+
+function MetricCard({
+  label,
+  value,
+  unit,
+  emphasized = false,
+}: {
+  label: string;
+  value: string;
+  unit: string;
+  emphasized?: boolean;
+}) {
+  return (
+    <div
+      className={[
+        "rounded-lg border p-4",
+        emphasized
+          ? "border-[var(--accent)] bg-[#e2eee8]"
+          : "border-[var(--line)] bg-white",
+      ].join(" ")}
+    >
+      <p className="text-xs font-semibold uppercase text-[var(--muted)]">{label}</p>
+      <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        <span className="font-mono text-2xl font-semibold leading-none text-[var(--foreground)]">
+          {value}
+        </span>
+        <span className="text-sm font-medium text-[var(--muted)]">{unit}</span>
+      </div>
     </div>
   );
 }
