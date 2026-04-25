@@ -93,18 +93,29 @@ Il reset password usa `resetPasswordForEmail` con redirect verso `/update-passwo
 
 ## Regole AI implementate
 
-Il prompt di sistema in `src/lib/ai/report-schema.ts` impone che il modello:
+Il prompt di sistema in `src/lib/ai/report-schema.ts` impone che il modello produca una scheda concisa:
 
 - non inventi quote, materiali, tolleranze o trattamenti
-- metta le deduzioni in `assumptions`
+- metta le deduzioni in `technical_assumptions`
 - metta dati non verificabili in `missing_data`
-- generi `customer_questions`
+- generi prossime verifiche in `next_checks`
+- usi al massimo 5 punti brevi per sezione
 - includa sempre `confidence_level` e `confidence_reason`
 - risponda solo in JSON validato da schema
 
 I PDF e le immagini vengono letti dal bucket Supabase, convertiti in base64 e inviati alla Responses API.
 
-I file STL vengono analizzati lato server con un parser interno compatibile con STL binario e ASCII base. L'analisi salva bounding box, dimensioni X/Y/Z, volume stimato, area superficiale, numero triangoli/facce e unita' presunta. Nota: STL non contiene unita' nativa, quindi l'app salva `mm presunti (STL unitless)`.
+I file STL vengono analizzati lato server con un parser interno compatibile con STL binario e ASCII base. L'analisi salva bounding box, dimensioni X/Y/Z, volume stimato, area superficiale, numero triangoli/facce e unita' scelta dall'utente. Nota: STL non contiene unita' nativa; di default l'app interpreta le coordinate come `mm`.
+
+Nella pagina dettaglio puoi scegliere l'unita' STL (`mm`, `cm`, `m`, `inch`) e una densita' materiale. Sono inclusi preset rapidi:
+
+- Alluminio: 2.70 g/cm3
+- Acciaio: 7.85 g/cm3
+- Titanio: 4.50 g/cm3
+- Plastica ABS: 1.04 g/cm3
+- Personalizzato
+
+L'app salva densita', volume in cm3 e peso stimato in grammi/kg, che vengono passati al prompt AI come dati geometrici rilevati.
 
 Gli altri file CAD/3D (`.step`, `.stp`, `.iges`, `.igs`, `.x_t`, `.x_b`, `.obj`, `.3mf`, `.dxf`, `.dwg`) vengono caricati, salvati e mostrati come documentazione tecnica, ma in questa versione non vengono parsati ne' inviati all'AI come contenuto tecnico. I file restano privati nello storage.
 

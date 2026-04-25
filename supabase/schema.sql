@@ -56,10 +56,24 @@ create table if not exists public.stl_geometry_analyses (
   surface_area double precision,
   triangle_count integer,
   presumed_unit text not null default 'mm presunti (STL unitless)',
+  selected_unit text not null default 'mm' check (selected_unit in ('mm', 'cm', 'm', 'inch')),
+  material_label text,
+  density_g_cm3 double precision,
+  volume_cm3 double precision,
+  estimated_weight_g double precision,
+  estimated_weight_kg double precision,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique(component_file_id)
 );
+
+alter table public.stl_geometry_analyses
+add column if not exists selected_unit text not null default 'mm' check (selected_unit in ('mm', 'cm', 'm', 'inch')),
+add column if not exists material_label text,
+add column if not exists density_g_cm3 double precision,
+add column if not exists volume_cm3 double precision,
+add column if not exists estimated_weight_g double precision,
+add column if not exists estimated_weight_kg double precision;
 
 create index if not exists folders_user_created_idx on public.folders(user_id, created_at desc);
 create index if not exists components_user_created_idx on public.components(user_id, created_at desc);

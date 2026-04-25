@@ -207,10 +207,13 @@ function formatGeometryForPrompt(analyses: StlGeometryAnalysis[]) {
         `STL ${index + 1}:`,
         `- bounding box min: ${formatVector(analysis.bounding_box?.min ?? null)}, max: ${formatVector(analysis.bounding_box?.max ?? null)}`,
         `- dimensioni X/Y/Z: ${formatVector(analysis.dimensions)}`,
-        `- volume stimato: ${formatNumber(analysis.volume_estimated)}`,
+        `- volume STL grezzo: ${formatNumber(analysis.volume_estimated)}`,
+        `- volume calcolato: ${formatNumber(analysis.volume_cm3)} cm3`,
         `- area superficiale: ${formatNumber(analysis.surface_area)}`,
+        `- densita': ${formatNumber(analysis.density_g_cm3)} g/cm3 (${analysis.material_label ?? "materiale non indicato"})`,
+        `- peso stimato: ${formatNumber(analysis.estimated_weight_g)} g / ${formatNumber(analysis.estimated_weight_kg)} kg`,
         `- triangoli/facce: ${analysis.triangle_count ?? "n/d"}`,
-        `- unita': ${analysis.presumed_unit}`,
+        `- unita' STL scelta: ${analysis.selected_unit}`,
       ].join("\n");
     })
     .join("\n\n");

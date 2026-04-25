@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { isStlFile } from "@/lib/files";
+import { convertVolumeToCm3 } from "@/lib/geometry-units";
 import { createClient } from "@/lib/supabase/server";
 import { parseStlGeometry } from "@/lib/stl/parser";
 import type { ComponentFile } from "@/lib/types";
@@ -49,6 +50,7 @@ export async function POST(
 
     const buffer = Buffer.from(await data.arrayBuffer());
     const geometry = parseStlGeometry(buffer);
+    const volumeCm3 = convertVolumeToCm3(geometry.volume_estimated, "mm");
 
     const { error: upsertError } = await supabase.from("stl_geometry_analyses").upsert(
       {
@@ -63,6 +65,12 @@ export async function POST(
         surface_area: geometry.surface_area,
         triangle_count: geometry.triangle_count,
         presumed_unit: geometry.presumed_unit,
+        selected_unit: "mm",
+        material_label: null,
+        density_g_cm3: null,
+        volume_cm3: volumeCm3,
+        estimated_weight_g: null,
+        estimated_weight_kg: null,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "component_file_id" },
@@ -92,6 +100,12 @@ export async function POST(
         surface_area: null,
         triangle_count: null,
         presumed_unit: "mm presunti (STL unitless)",
+        selected_unit: "mm",
+        material_label: null,
+        density_g_cm3: null,
+        volume_cm3: null,
+        estimated_weight_g: null,
+        estimated_weight_kg: null,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "component_file_id" },

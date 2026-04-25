@@ -2,16 +2,13 @@ import { z } from "zod";
 
 export const technicalReportSchema = z.object({
   component_name: z.string().min(1),
-  description: z.string().min(1),
-  probable_function: z.string().min(1),
-  confirmed_data: z.array(z.string()),
-  assumptions: z.array(z.string()),
+  detected_data: z.array(z.string()).max(5),
+  technical_assumptions: z.array(z.string()).max(5),
   missing_data: z.array(z.string()),
-  customer_questions: z.array(z.string()),
   risks: z.array(z.string()),
-  suggested_processes: z.array(z.string()),
+  next_checks: z.array(z.string()).max(5),
   confidence_level: z.enum(["low", "medium", "high"]),
-  confidence_reason: z.string().min(1),
+  confidence_reason: z.string().max(180),
 });
 
 export const jsonSchema = {
@@ -21,27 +18,21 @@ export const jsonSchema = {
     additionalProperties: false,
     required: [
       "component_name",
-      "description",
-      "probable_function",
-      "confirmed_data",
-      "assumptions",
+      "detected_data",
+      "technical_assumptions",
       "missing_data",
-      "customer_questions",
       "risks",
-      "suggested_processes",
+      "next_checks",
       "confidence_level",
       "confidence_reason",
     ],
     properties: {
       component_name: { type: "string" },
-      description: { type: "string" },
-      probable_function: { type: "string" },
-      confirmed_data: { type: "array", items: { type: "string" } },
-      assumptions: { type: "array", items: { type: "string" } },
-      missing_data: { type: "array", items: { type: "string" } },
-      customer_questions: { type: "array", items: { type: "string" } },
-      risks: { type: "array", items: { type: "string" } },
-      suggested_processes: { type: "array", items: { type: "string" } },
+      detected_data: { type: "array", maxItems: 5, items: { type: "string" } },
+      technical_assumptions: { type: "array", maxItems: 5, items: { type: "string" } },
+      missing_data: { type: "array", maxItems: 5, items: { type: "string" } },
+      risks: { type: "array", maxItems: 5, items: { type: "string" } },
+      next_checks: { type: "array", maxItems: 5, items: { type: "string" } },
       confidence_level: { type: "string", enum: ["low", "medium", "high"] },
       confidence_reason: { type: "string" },
     },
@@ -54,13 +45,14 @@ Sei un assistente tecnico per reverse engineering preliminare di componenti mecc
 
 Regole non negoziabili:
 - Non inventare dati tecnici, quote, materiali, trattamenti o tolleranze.
-- Se un dato non e' visibile o deducibile con alta sicurezza, mettilo in missing_data o customer_questions.
-- Se fai una deduzione, deve stare in assumptions, non in confirmed_data.
-- Separa sempre dati certi, ipotesi e dati mancanti.
+- Output conciso, tecnico, a punti brevi. Niente introduzioni, frasi generiche o spiegazioni lunghe.
+- Usa solo queste sezioni: detected_data, technical_assumptions, missing_data, risks, next_checks.
+- Massimo 5 punti per sezione. Ogni punto massimo 120 caratteri.
+- Se un dato non e' visibile o deducibile con alta sicurezza, mettilo in missing_data o next_checks.
+- Se fai una deduzione, deve stare in technical_assumptions, non in detected_data.
 - Includi sempre confidence_level e confidence_reason.
-- Le lavorazioni suggerite devono essere prudenti e preliminari.
-- Se le informazioni sono insufficienti, genera domande puntuali da fare al cliente.
-- Se sono presenti dati geometrici STL calcolati lato server, puoi usarli come dati certi di geometria, specificando che l'unita' e' presunta perche' STL non contiene unita' nativa.
+- Se sono presenti peso, volume e dimensioni STL calcolati lato server, usali nei detected_data.
+- Non inventare trattamenti, lavorazioni o materiali non indicati.
 - Non usare file STEP, IGES, Parasolid, OBJ, 3MF, DXF o DWG come fonte geometrica finche' non esiste una loro analisi esplicita.
 - Rispondi solo con JSON valido conforme allo schema.
 `.trim();

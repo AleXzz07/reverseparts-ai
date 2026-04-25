@@ -150,20 +150,15 @@ export default async function ComponentDetailPage({
             <div className="space-y-5">
               <div className="rounded-lg border border-[var(--line)] bg-[#faf9f5] p-4">
                 <h3 className="font-semibold">{report.component_name}</h3>
-                <p className="mt-2 text-sm leading-6">{report.description}</p>
-                <p className="mt-3 text-sm leading-6">
-                  <strong>Funzione probabile:</strong> {report.probable_function}
-                </p>
-                <p className="mt-3 text-sm leading-6 text-[var(--muted)]">
+                <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
                   {report.confidence_reason}
                 </p>
               </div>
-              <ReportSection title="Dati certi" items={report.confirmed_data} />
-              <ReportSection title="Ipotesi" items={report.assumptions} tone="warning" />
+              <ReportSection title="Dati rilevati" items={report.detected_data} />
+              <ReportSection title="Ipotesi tecniche" items={report.technical_assumptions} tone="warning" />
               <ReportSection title="Dati mancanti" items={report.missing_data} tone="warning" />
-              <ReportSection title="Domande al cliente" items={report.customer_questions} />
               <ReportSection title="Criticita'" items={report.risks} tone="danger" />
-              <ReportSection title="Lavorazioni suggerite" items={report.suggested_processes} />
+              <ReportSection title="Prossime verifiche" items={report.next_checks} />
             </div>
           ) : (
             <div className="rounded-lg border border-dashed border-[var(--line)] p-8 text-center">

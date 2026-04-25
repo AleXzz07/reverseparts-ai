@@ -18,7 +18,7 @@ export function ReportSection({
     <section className={`rounded-lg border p-4 ${color}`}>
       <h3 className="mb-3 font-semibold">{title}</h3>
       {items.length ? (
-        <ul className="space-y-2 text-sm leading-6">
+        <ul className="list-disc space-y-2 pl-4 text-sm leading-6">
           {items.map((item, index) => (
             <li key={`${title}-${index}`}>{item}</li>
           ))}

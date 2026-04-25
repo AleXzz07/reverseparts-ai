@@ -22,14 +22,11 @@ export type Folder = {
 
 export type TechnicalReport = {
   component_name: string;
-  description: string;
-  probable_function: string;
-  confirmed_data: string[];
-  assumptions: string[];
+  detected_data: string[];
+  technical_assumptions: string[];
   missing_data: string[];
-  customer_questions: string[];
   risks: string[];
-  suggested_processes: string[];
+  next_checks: string[];
   confidence_level: "low" | "medium" | "high";
   confidence_reason: string;
 };
@@ -76,6 +73,12 @@ export type StlGeometryAnalysis = {
   surface_area: number | null;
   triangle_count: number | null;
   presumed_unit: string;
+  selected_unit: "mm" | "cm" | "m" | "inch";
+  material_label: string | null;
+  density_g_cm3: number | null;
+  volume_cm3: number | null;
+  estimated_weight_g: number | null;
+  estimated_weight_kg: number | null;
   created_at: string;
   updated_at: string;
 };

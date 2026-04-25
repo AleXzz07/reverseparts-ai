@@ -1,3 +1,14 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import {
+  calculateWeight,
+  convertAreaFromSquareMillimeters,
+  convertVolumeToCm3,
+  materialPresets,
+  type StlUnit,
+  unitOptions,
+} from "@/lib/geometry-units";
 import type { StlGeometryAnalysis } from "@/lib/types";
 
 export function GeometryAnalysisSection({
@@ -14,54 +25,157 @@ export function GeometryAnalysisSection({
       <h2 className="mb-4 text-lg font-semibold">Analisi geometrica</h2>
       <div className="space-y-4">
         {analyses.map((analysis) => (
-          <div key={analysis.id} className="rounded-lg border border-[var(--line)] bg-[#faf9f5] p-4">
-            {analysis.status === "failed" ? (
-              <div>
-                <p className="font-semibold text-[var(--danger)]">STL non analizzabile</p>
-                <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-                  {analysis.error_message ?? "Errore non specificato durante l'analisi STL."}
-                </p>
-              </div>
-            ) : (
-              <div>
-                <div className="mb-4 flex flex-col justify-between gap-2 md:flex-row md:items-center">
-                  <p className="font-semibold">Risultati STL</p>
-                  <span className="rounded-full bg-[#e2eee8] px-2 py-1 text-xs font-semibold text-[var(--accent-strong)]">
-                    {analysis.presumed_unit}
-                  </span>
-                </div>
-                <dl className="grid gap-3 text-sm sm:grid-cols-2">
-                  <Metric label="Dimensione X" value={formatNumber(analysis.dimensions?.x)} />
-                  <Metric label="Dimensione Y" value={formatNumber(analysis.dimensions?.y)} />
-                  <Metric label="Dimensione Z" value={formatNumber(analysis.dimensions?.z)} />
-                  <Metric label="Volume stimato" value={formatNumber(analysis.volume_estimated)} />
-                  <Metric label="Area superficiale" value={formatNumber(analysis.surface_area)} />
-                  <Metric label="Triangoli/facce" value={formatInteger(analysis.triangle_count)} />
-                </dl>
-                {analysis.bounding_box ? (
-                  <p className="mt-4 font-mono text-xs leading-5 text-[var(--muted)]">
-                    Bounding box min [{formatNumber(analysis.bounding_box.min.x)},{" "}
-                    {formatNumber(analysis.bounding_box.min.y)},{" "}
-                    {formatNumber(analysis.bounding_box.min.z)}] max [
-                    {formatNumber(analysis.bounding_box.max.x)},{" "}
-                    {formatNumber(analysis.bounding_box.max.y)},{" "}
-                    {formatNumber(analysis.bounding_box.max.z)}]
-                  </p>
-                ) : null}
-              </div>
-            )}
-          </div>
+          <GeometryAnalysisCard key={analysis.id} analysis={analysis} />
         ))}
       </div>
     </section>
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+function GeometryAnalysisCard({ analysis }: { analysis: StlGeometryAnalysis }) {
+  const [unit, setUnit] = useState<StlUnit>(analysis.selected_unit ?? "mm");
+  const [material, setMaterial] = useState(analysis.material_label ?? "");
+  const [density, setDensity] = useState<number | null>(analysis.density_g_cm3);
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+
+  const calculated = useMemo(() => {
+    const volumeCm3 = convertVolumeToCm3(analysis.volume_estimated, unit);
+    const area = convertAreaFromSquareMillimeters(analysis.surface_area, unit);
+    const weight = calculateWeight(volumeCm3, density);
+
+    return { volumeCm3, area, weight };
+  }, [analysis.surface_area, analysis.volume_estimated, density, unit]);
+
+  if (analysis.status === "failed") {
+    return (
+      <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+        <p className="font-semibold text-[var(--danger)]">STL non analizzabile</p>
+        <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
+          {analysis.error_message ?? "Errore non specificato durante l'analisi STL."}
+        </p>
+      </div>
+    );
+  }
+
+  async function save(nextUnit = unit, nextMaterial = material, nextDensity = density) {
+    setSaveState("saving");
+    const response = await fetch(`/api/geometry/${analysis.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        selected_unit: nextUnit,
+        material_label: nextMaterial || null,
+        density_g_cm3: nextDensity,
+      }),
+    });
+
+    setSaveState(response.ok ? "saved" : "error");
+  }
+
+  function selectMaterial(label: string) {
+    const preset = materialPresets.find((item) => item.label === label);
+    const nextDensity = preset?.density ?? null;
+
+    setMaterial(label);
+    setDensity(nextDensity);
+    void save(unit, label, nextDensity);
+  }
+
+  function updateUnit(nextUnit: StlUnit) {
+    setUnit(nextUnit);
+    void save(nextUnit, material, density);
+  }
+
+  function updateDensity(value: string) {
+    const nextDensity = value ? Number(value) : null;
+    setDensity(nextDensity);
+    void save(unit, material || "Personalizzato", nextDensity);
+  }
+
   return (
-    <div>
-      <dt className="text-[var(--muted)]">{label}</dt>
-      <dd className="mt-1 font-mono font-semibold">{value}</dd>
+    <div className="rounded-lg border border-[var(--line)] bg-[#faf9f5] p-4">
+      <div className="mb-4 grid gap-3 md:grid-cols-3">
+        <label className="block text-sm">
+          <span className="mb-1 block font-medium">Unità STL</span>
+          <select
+            className="field py-2"
+            value={unit}
+            onChange={(event) => updateUnit(event.target.value as StlUnit)}
+          >
+            {unitOptions.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block text-sm">
+          <span className="mb-1 block font-medium">Materiale</span>
+          <select
+            className="field py-2"
+            value={material}
+            onChange={(event) => selectMaterial(event.target.value)}
+          >
+            <option value="">Non indicato</option>
+            {materialPresets.map((preset) => (
+              <option key={preset.label} value={preset.label}>
+                {preset.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block text-sm">
+          <span className="mb-1 block font-medium">Densità g/cm³</span>
+          <input
+            className="field py-2"
+            type="number"
+            min="0"
+            step="0.01"
+            value={density ?? ""}
+            onChange={(event) => updateDensity(event.target.value)}
+            placeholder="Es. 7.85"
+          />
+        </label>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[720px] border-collapse text-sm">
+          <thead>
+            <tr className="border-b border-[var(--line)] text-left text-xs uppercase text-[var(--muted)]">
+              <th className="py-2 pr-3">X</th>
+              <th className="py-2 pr-3">Y</th>
+              <th className="py-2 pr-3">Z</th>
+              <th className="py-2 pr-3">Volume</th>
+              <th className="py-2 pr-3">Area</th>
+              <th className="py-2 pr-3">Triangoli</th>
+              <th className="py-2 pr-3">Unità</th>
+              <th className="py-2">Peso stimato</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="font-mono">
+              <td className="py-3 pr-3">{formatNumber(analysis.dimensions?.x)}</td>
+              <td className="py-3 pr-3">{formatNumber(analysis.dimensions?.y)}</td>
+              <td className="py-3 pr-3">{formatNumber(analysis.dimensions?.z)}</td>
+              <td className="py-3 pr-3">{formatNumber(calculated.volumeCm3)} cm³</td>
+              <td className="py-3 pr-3">{formatNumber(calculated.area)} {unit}²</td>
+              <td className="py-3 pr-3">{formatInteger(analysis.triangle_count)}</td>
+              <td className="py-3 pr-3">{unit}</td>
+              <td className="py-3">
+                {formatNumber(calculated.weight.grams)} g /{" "}
+                {formatNumber(calculated.weight.kilograms)} kg
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p className="mt-3 text-xs text-[var(--muted)]">
+        STL non contiene unità native: la select interpreta le coordinate del file.
+        {saveState === "saving" ? " Salvataggio..." : null}
+        {saveState === "saved" ? " Valori salvati." : null}
+        {saveState === "error" ? " Errore durante il salvataggio." : null}
+      </p>
     </div>
   );
 }
