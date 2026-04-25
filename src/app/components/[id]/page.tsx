@@ -3,10 +3,17 @@ import { Box, File, FileImage } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { BackLink } from "@/components/back-link";
 import { GenerateReportButton } from "@/components/generate-report-button";
+import { GeometryAnalysisSection } from "@/components/geometry-analysis-section";
 import { ReportSection } from "@/components/report-section";
-import { isTechnicalDocument } from "@/lib/files";
+import { isStlFile, isTechnicalDocument } from "@/lib/files";
 import { createClient } from "@/lib/supabase/server";
-import type { AiReportRow, ComponentFile, ComponentProject, TechnicalReport } from "@/lib/types";
+import type {
+  AiReportRow,
+  ComponentFile,
+  ComponentProject,
+  StlGeometryAnalysis,
+  TechnicalReport,
+} from "@/lib/types";
 
 export default async function ComponentDetailPage({
   params,
@@ -33,7 +40,7 @@ export default async function ComponentDetailPage({
     notFound();
   }
 
-  const [{ data: files }, { data: reports }] = await Promise.all([
+  const [{ data: files }, { data: reports }, { data: geometryAnalyses }] = await Promise.all([
     supabase.from("component_files").select("*").eq("component_id", id).order("created_at"),
     supabase
       .from("ai_reports")
@@ -41,10 +48,19 @@ export default async function ComponentDetailPage({
       .eq("component_id", id)
       .order("created_at", { ascending: false })
       .limit(1),
+    supabase
+      .from("stl_geometry_analyses")
+      .select("*")
+      .eq("component_id", id)
+      .order("created_at"),
   ]);
 
   const latestReport = reports?.[0] as AiReportRow | undefined;
   const report = latestReport?.report as TechnicalReport | undefined;
+  const geometryRows = (geometryAnalyses as StlGeometryAnalysis[]) ?? [];
+  const geometryByFileId = new Map(
+    geometryRows.map((analysis) => [analysis.component_file_id, analysis]),
+  );
 
   return (
     <AppShell>
@@ -90,7 +106,15 @@ export default async function ComponentDetailPage({
                     )}
                     <span className="break-all">{file.file_name}</span>
                     </span>
-                    {isTechnicalDocument(file.file_name) ? (
+                    {isStlFile(file.file_name) && geometryByFileId.get(file.id)?.status === "failed" ? (
+                      <span className="shrink-0 rounded-full bg-red-100 px-2 py-1 text-xs font-semibold text-red-700">
+                        STL errore
+                      </span>
+                    ) : isStlFile(file.file_name) && geometryByFileId.get(file.id)?.status === "success" ? (
+                      <span className="shrink-0 rounded-full bg-[#e2eee8] px-2 py-1 text-xs font-semibold text-[var(--accent-strong)]">
+                        STL analizzato
+                      </span>
+                    ) : isTechnicalDocument(file.file_name) ? (
                       <span className="shrink-0 rounded-full bg-[#e2eee8] px-2 py-1 text-xs font-semibold text-[var(--accent-strong)]">
                         CAD/3D
                       </span>
@@ -102,6 +126,7 @@ export default async function ComponentDetailPage({
               <p className="text-sm text-[var(--muted)]">Nessun file caricato.</p>
             )}
           </section>
+          <GeometryAnalysisSection analyses={geometryRows} />
         </aside>
 
         <section className="panel p-5">

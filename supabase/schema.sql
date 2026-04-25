@@ -43,16 +43,36 @@ create table if not exists public.ai_reports (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.stl_geometry_analyses (
+  id uuid primary key default gen_random_uuid(),
+  component_id uuid not null references public.components(id) on delete cascade,
+  component_file_id uuid not null references public.component_files(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  status text not null check (status in ('success', 'failed')),
+  error_message text,
+  bounding_box jsonb,
+  dimensions jsonb,
+  volume_estimated double precision,
+  surface_area double precision,
+  triangle_count integer,
+  presumed_unit text not null default 'mm presunti (STL unitless)',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique(component_file_id)
+);
+
 create index if not exists folders_user_created_idx on public.folders(user_id, created_at desc);
 create index if not exists components_user_created_idx on public.components(user_id, created_at desc);
 create index if not exists components_folder_created_idx on public.components(folder_id, created_at desc);
 create index if not exists component_files_component_idx on public.component_files(component_id);
 create index if not exists ai_reports_component_created_idx on public.ai_reports(component_id, created_at desc);
+create index if not exists stl_geometry_component_idx on public.stl_geometry_analyses(component_id);
 
 alter table public.folders enable row level security;
 alter table public.components enable row level security;
 alter table public.component_files enable row level security;
 alter table public.ai_reports enable row level security;
+alter table public.stl_geometry_analyses enable row level security;
 
 drop policy if exists "Users can manage own folders" on public.folders;
 create policy "Users can manage own folders"
@@ -86,6 +106,12 @@ with check (auth.uid() = user_id);
 drop policy if exists "Users can manage own AI reports" on public.ai_reports;
 create policy "Users can manage own AI reports"
 on public.ai_reports for all
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+drop policy if exists "Users can manage own STL geometry analyses" on public.stl_geometry_analyses;
+create policy "Users can manage own STL geometry analyses"
+on public.stl_geometry_analyses for all
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
 

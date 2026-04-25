@@ -4,7 +4,7 @@ import type { ResponseInputContent } from "openai/resources/responses/responses"
 import { reportSystemPrompt, jsonSchema, technicalReportSchema } from "@/lib/ai/report-schema";
 import { aiReadableMimeTypes, isTechnicalDocument } from "@/lib/files";
 import { createClient } from "@/lib/supabase/server";
-import type { ComponentFile, ComponentProject } from "@/lib/types";
+import type { ComponentFile, ComponentProject, StlGeometryAnalysis } from "@/lib/types";
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
 
@@ -81,6 +81,16 @@ export async function POST(
       return NextResponse.json({ error: filesError.message }, { status: 500 });
     }
 
+    const { data: geometryAnalyses, error: geometryError } = await supabase
+      .from("stl_geometry_analyses")
+      .select("*")
+      .eq("component_id", id)
+      .order("created_at");
+
+    if (geometryError) {
+      return NextResponse.json({ error: geometryError.message }, { status: 500 });
+    }
+
     const content: ResponseInputContent[] = [
       {
         type: "input_text",
@@ -92,7 +102,10 @@ Nome interno progetto: ${(component as ComponentProject).title}
 Note tecniche dell'utente:
 ${(component as ComponentProject).notes || "Nessuna nota tecnica fornita."}
 
-File allegati: ${(files as ComponentFile[] | null)?.map((file) => `${file.file_name} (${isTechnicalDocument(file.file_name) ? "documentazione CAD/3D non analizzata in questa versione" : file.file_type})`).join(", ") || "nessuno"}.
+File allegati: ${(files as ComponentFile[] | null)?.map((file) => `${file.file_name} (${describeFileForPrompt(file)})`).join(", ") || "nessuno"}.
+
+Dati geometrici STL calcolati lato server:
+${formatGeometryForPrompt((geometryAnalyses as StlGeometryAnalysis[] | null) ?? [])}
 `.trim(),
       },
     ];
@@ -163,4 +176,58 @@ File allegati: ${(files as ComponentFile[] | null)?.map((file) => `${file.file_n
     const message = error instanceof Error ? error.message : "Errore inatteso.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
+}
+
+function describeFileForPrompt(file: ComponentFile) {
+  if (file.file_name.toLowerCase().endsWith(".stl")) {
+    return "file STL; usare l'analisi geometrica calcolata se presente";
+  }
+
+  if (isTechnicalDocument(file.file_name)) {
+    return "documentazione CAD/3D non analizzata in questa versione";
+  }
+
+  return file.file_type;
+}
+
+function formatGeometryForPrompt(analyses: StlGeometryAnalysis[]) {
+  if (!analyses.length) {
+    return "Nessuna analisi geometrica STL disponibile.";
+  }
+
+  return analyses
+    .map((analysis, index) => {
+      if (analysis.status === "failed") {
+        return `STL ${index + 1}: analisi fallita. Errore: ${
+          analysis.error_message ?? "errore non specificato"
+        }.`;
+      }
+
+      return [
+        `STL ${index + 1}:`,
+        `- bounding box min: ${formatVector(analysis.bounding_box?.min ?? null)}, max: ${formatVector(analysis.bounding_box?.max ?? null)}`,
+        `- dimensioni X/Y/Z: ${formatVector(analysis.dimensions)}`,
+        `- volume stimato: ${formatNumber(analysis.volume_estimated)}`,
+        `- area superficiale: ${formatNumber(analysis.surface_area)}`,
+        `- triangoli/facce: ${analysis.triangle_count ?? "n/d"}`,
+        `- unita': ${analysis.presumed_unit}`,
+      ].join("\n");
+    })
+    .join("\n\n");
+}
+
+function formatVector(vector: StlGeometryAnalysis["dimensions"]) {
+  if (!vector) {
+    return "n/d";
+  }
+
+  return `${formatNumber(vector.x)} / ${formatNumber(vector.y)} / ${formatNumber(vector.z)}`;
+}
+
+function formatNumber(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "n/d";
+  }
+
+  return Number(value.toFixed(6)).toString();
 }

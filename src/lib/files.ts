@@ -53,6 +53,10 @@ export function isTechnicalDocument(fileName: string) {
   return technicalDocumentExtensions.has(getFileExtension(fileName));
 }
 
+export function isStlFile(fileName: string) {
+  return getFileExtension(fileName) === ".stl";
+}
+
 export function getStoredContentType(file: File) {
   return file.type || "application/octet-stream";
 }

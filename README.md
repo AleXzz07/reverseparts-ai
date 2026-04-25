@@ -11,6 +11,7 @@ Web app Next.js per caricare foto, PDF e note tecniche di un componente meccanic
 - Creazione nuovo componente
 - Eliminazione componenti con rimozione file Storage e report AI collegati
 - Upload immagini, PDF e file CAD/3D su Supabase Storage privato
+- Analisi geometrica server-side per file STL
 - Campo note tecniche
 - Generazione scheda AI con OpenAI Responses API
 - Separazione obbligatoria tra dati certi, ipotesi e dati mancanti
@@ -72,6 +73,7 @@ Lo schema si trova in `supabase/schema.sql` e crea:
 - `components`
 - `folders`
 - `component_files`
+- `stl_geometry_analyses`
 - `ai_reports`
 - bucket privato `component-files`
 - policy RLS per isolare i dati per utente
@@ -100,7 +102,11 @@ Il prompt di sistema in `src/lib/ai/report-schema.ts` impone che il modello:
 - includa sempre `confidence_level` e `confidence_reason`
 - risponda solo in JSON validato da schema
 
-I PDF e le immagini vengono letti dal bucket Supabase, convertiti in base64 e inviati alla Responses API. I file CAD/3D (`.stl`, `.step`, `.stp`, `.iges`, `.igs`, `.x_t`, `.x_b`, `.obj`, `.3mf`, `.dxf`, `.dwg`) vengono caricati, salvati e mostrati come documentazione tecnica, ma in questa versione non vengono parsati ne' inviati all'AI come contenuto tecnico. I file restano privati nello storage.
+I PDF e le immagini vengono letti dal bucket Supabase, convertiti in base64 e inviati alla Responses API.
+
+I file STL vengono analizzati lato server con un parser interno compatibile con STL binario e ASCII base. L'analisi salva bounding box, dimensioni X/Y/Z, volume stimato, area superficiale, numero triangoli/facce e unita' presunta. Nota: STL non contiene unita' nativa, quindi l'app salva `mm presunti (STL unitless)`.
+
+Gli altri file CAD/3D (`.step`, `.stp`, `.iges`, `.igs`, `.x_t`, `.x_b`, `.obj`, `.3mf`, `.dxf`, `.dwg`) vengono caricati, salvati e mostrati come documentazione tecnica, ma in questa versione non vengono parsati ne' inviati all'AI come contenuto tecnico. I file restano privati nello storage.
 
 ## Deploy Vercel
 

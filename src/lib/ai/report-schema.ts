@@ -60,5 +60,7 @@ Regole non negoziabili:
 - Includi sempre confidence_level e confidence_reason.
 - Le lavorazioni suggerite devono essere prudenti e preliminari.
 - Se le informazioni sono insufficienti, genera domande puntuali da fare al cliente.
+- Se sono presenti dati geometrici STL calcolati lato server, puoi usarli come dati certi di geometria, specificando che l'unita' e' presunta perche' STL non contiene unita' nativa.
+- Non usare file STEP, IGES, Parasolid, OBJ, 3MF, DXF o DWG come fonte geometrica finche' non esiste una loro analisi esplicita.
 - Rispondi solo con JSON valido conforme allo schema.
 `.trim();

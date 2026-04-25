@@ -53,3 +53,29 @@ export type AiReportRow = {
   model: string;
   created_at: string;
 };
+
+export type GeometryVector = {
+  x: number;
+  y: number;
+  z: number;
+};
+
+export type StlGeometryAnalysis = {
+  id: string;
+  component_id: string;
+  component_file_id: string;
+  user_id: string;
+  status: "success" | "failed";
+  error_message: string | null;
+  bounding_box: {
+    min: GeometryVector;
+    max: GeometryVector;
+  } | null;
+  dimensions: GeometryVector | null;
+  volume_estimated: number | null;
+  surface_area: number | null;
+  triangle_count: number | null;
+  presumed_unit: string;
+  created_at: string;
+  updated_at: string;
+};

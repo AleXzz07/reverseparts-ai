@@ -6,6 +6,7 @@ import { UploadCloud } from "lucide-react";
 import { createClient } from "@/lib/supabase/browser";
 import {
   getStoredContentType,
+  isStlFile,
   isSupportedUpload,
   supportedUploadExtensions,
 } from "@/lib/files";
@@ -67,19 +68,41 @@ export function NewComponentForm({
         return;
       }
 
-      const { error: fileError } = await supabase.from("component_files").insert({
-        component_id: component.id,
-        user_id: userId,
-        file_name: file.name,
-        file_path: path,
-        file_type: contentType,
-        file_size: file.size,
-      });
+      const { data: savedFile, error: fileError } = await supabase
+        .from("component_files")
+        .insert({
+          component_id: component.id,
+          user_id: userId,
+          file_name: file.name,
+          file_path: path,
+          file_type: contentType,
+          file_size: file.size,
+        })
+        .select("id")
+        .single();
 
-      if (fileError) {
-        setError(fileError.message);
+      if (fileError || !savedFile) {
+        setError(fileError?.message ?? "Impossibile salvare il riferimento del file.");
         setLoading(false);
         return;
+      }
+
+      if (isStlFile(file.name)) {
+        const analysisResponse = await fetch(`/api/files/${savedFile.id}/analyze-stl`, {
+          method: "POST",
+        });
+
+        if (!analysisResponse.ok) {
+          const payload = (await analysisResponse.json().catch(() => null)) as
+            | { error?: string }
+            | null;
+          setError(
+            payload?.error ??
+              `Il file STL ${file.name} e' stato caricato ma non e' analizzabile.`,
+          );
+          setLoading(false);
+          return;
+        }
       }
     }
 
