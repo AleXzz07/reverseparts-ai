@@ -57,6 +57,16 @@ export type GeometryVector = {
   z: number;
 };
 
+export type StlDetectedHole = {
+  diameter_estimated: number;
+  center: GeometryVector;
+  axis: GeometryVector | null;
+  confidence: "low" | "medium" | "high";
+  circularity: number;
+  vertex_count: number;
+  note: string;
+};
+
 export type StlGeometryAnalysis = {
   id: string;
   component_id: string;
@@ -79,6 +89,7 @@ export type StlGeometryAnalysis = {
   volume_cm3: number | null;
   estimated_weight_g: number | null;
   estimated_weight_kg: number | null;
+  holes_detected: StlDetectedHole[] | null;
   created_at: string;
   updated_at: string;
 };

@@ -214,9 +214,29 @@ function formatGeometryForPrompt(analyses: StlGeometryAnalysis[]) {
         `- peso stimato: ${formatNumber(analysis.estimated_weight_g)} g / ${formatNumber(analysis.estimated_weight_kg)} kg`,
         `- triangoli/facce: ${analysis.triangle_count ?? "n/d"}`,
         `- unita' STL scelta: ${analysis.selected_unit}`,
+        `- fori rilevati stimati: ${formatHolesForPrompt(analysis.holes_detected ?? [], analysis.selected_unit)}`,
       ].join("\n");
     })
     .join("\n\n");
+}
+
+function formatHolesForPrompt(
+  holes: StlGeometryAnalysis["holes_detected"],
+  unit: StlGeometryAnalysis["selected_unit"],
+) {
+  const safeHoles = holes ?? [];
+
+  if (safeHoles.length === 0) {
+    return "nessuno";
+  }
+
+  return safeHoles
+    .slice(0, 8)
+    .map(
+      (hole, index) =>
+        `foro ${index + 1}: diametro ${formatNumber(hole.diameter_estimated)} ${unit}, centro ${formatVector(hole.center)}, asse ${formatVector(hole.axis)}, confidenza ${hole.confidence}`,
+    )
+    .join("; ");
 }
 
 function formatVector(vector: StlGeometryAnalysis["dimensions"]) {

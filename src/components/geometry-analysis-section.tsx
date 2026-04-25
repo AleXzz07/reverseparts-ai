@@ -9,7 +9,7 @@ import {
   type StlUnit,
   unitOptions,
 } from "@/lib/geometry-units";
-import type { StlGeometryAnalysis } from "@/lib/types";
+import type { StlDetectedHole, StlGeometryAnalysis } from "@/lib/types";
 
 export function GeometryAnalysisSection({
   analyses,
@@ -165,6 +165,68 @@ function GeometryAnalysisCard({ analysis }: { analysis: StlGeometryAnalysis }) {
         {saveState === "saved" ? " Valori salvati." : null}
         {saveState === "error" ? " Errore durante il salvataggio." : null}
       </p>
+
+      <DetectedHoles holes={analysis.holes_detected ?? []} unit={unit} />
+    </div>
+  );
+}
+
+function DetectedHoles({ holes, unit }: { holes?: StlDetectedHole[]; unit: StlUnit }) {
+  const safeHoles = holes ?? [];
+
+  return (
+    <section className="mt-5 border-t border-[var(--line)] pt-4">
+      <div className="mb-3 flex flex-col justify-between gap-1 sm:flex-row sm:items-end">
+        <div>
+          <h3 className="font-semibold">Fori rilevati</h3>
+          <p className="mt-1 text-xs text-[var(--muted)]">
+            Stima automatica da bordi aperti STL: verificare con CAD/metrologia.
+          </p>
+        </div>
+        {safeHoles.length > 0 ? (
+          <span className="text-xs font-semibold text-[var(--accent-strong)]">
+            {safeHoles.length} rilevati
+          </span>
+        ) : null}
+      </div>
+
+      {safeHoles.length === 0 ? (
+        <p className="rounded-lg border border-dashed border-[var(--line)] bg-white p-3 text-sm text-[var(--muted)]">
+          Nessun foro rilevato automaticamente.
+        </p>
+      ) : (
+        <div className="grid gap-3">
+          {safeHoles.map((hole, index) => (
+            <div
+              key={`${hole.center.x}-${hole.center.y}-${hole.center.z}-${index}`}
+              className="rounded-lg border border-[var(--line)] bg-white p-3"
+            >
+              <div className="grid gap-3 text-sm md:grid-cols-[1fr_1.4fr_1fr_0.8fr]">
+                <HoleMetric
+                  label="Diametro"
+                  value={formatNumber(hole.diameter_estimated)}
+                  unit={unit}
+                />
+                <HoleMetric label="Centro X/Y/Z" value={formatVector(hole.center)} unit={unit} />
+                <HoleMetric label="Asse stimato" value={formatAxis(hole.axis)} unit="" />
+                <HoleMetric label="Confidenza" value={confidenceLabel(hole.confidence)} unit="" />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function HoleMetric({ label, value, unit }: { label: string; value: string; unit: string }) {
+  return (
+    <div>
+      <p className="text-xs font-semibold uppercase text-[var(--muted)]">{label}</p>
+      <p className="mt-1 font-mono text-sm font-semibold">
+        {value}
+        {unit ? <span className="ml-1 font-sans text-xs text-[var(--muted)]">{unit}</span> : null}
+      </p>
     </div>
   );
 }
@@ -218,4 +280,28 @@ function formatInteger(value: number | null | undefined) {
   return new Intl.NumberFormat("it-IT", {
     maximumFractionDigits: 0,
   }).format(value);
+}
+
+function formatVector(vector: StlDetectedHole["center"]) {
+  return `${formatNumber(vector.x)} / ${formatNumber(vector.y)} / ${formatNumber(vector.z)}`;
+}
+
+function formatAxis(axis: StlDetectedHole["axis"]) {
+  if (!axis) {
+    return "n/d";
+  }
+
+  return `${formatNumber(axis.x)} / ${formatNumber(axis.y)} / ${formatNumber(axis.z)}`;
+}
+
+function confidenceLabel(confidence: StlDetectedHole["confidence"]) {
+  if (confidence === "high") {
+    return "Alta";
+  }
+
+  if (confidence === "medium") {
+    return "Media";
+  }
+
+  return "Bassa";
 }

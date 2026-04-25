@@ -62,6 +62,7 @@ create table if not exists public.stl_geometry_analyses (
   volume_cm3 double precision,
   estimated_weight_g double precision,
   estimated_weight_kg double precision,
+  holes_detected jsonb not null default '[]'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique(component_file_id)
@@ -73,7 +74,8 @@ add column if not exists material_label text,
 add column if not exists density_g_cm3 double precision,
 add column if not exists volume_cm3 double precision,
 add column if not exists estimated_weight_g double precision,
-add column if not exists estimated_weight_kg double precision;
+add column if not exists estimated_weight_kg double precision,
+add column if not exists holes_detected jsonb not null default '[]'::jsonb;
 
 create index if not exists folders_user_created_idx on public.folders(user_id, created_at desc);
 create index if not exists components_user_created_idx on public.components(user_id, created_at desc);
