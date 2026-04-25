@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useMemo, useState } from "react";
 import {
@@ -14,9 +14,11 @@ import type { StlGeometryAnalysis } from "@/lib/types";
 export function GeometryAnalysisSection({
   analyses,
 }: {
-  analyses: StlGeometryAnalysis[];
+  analyses?: StlGeometryAnalysis[];
 }) {
-  if (!analyses.length) {
+  const safeAnalyses = analyses ?? [];
+
+  if (safeAnalyses.length === 0) {
     return null;
   }
 
@@ -24,7 +26,7 @@ export function GeometryAnalysisSection({
     <section className="panel p-5">
       <h2 className="mb-4 text-lg font-semibold">Analisi geometrica</h2>
       <div className="space-y-4">
-        {analyses.map((analysis) => (
+        {safeAnalyses.map((analysis) => (
           <GeometryAnalysisCard key={analysis.id} analysis={analysis} />
         ))}
       </div>
@@ -35,7 +37,7 @@ export function GeometryAnalysisSection({
 function GeometryAnalysisCard({ analysis }: { analysis: StlGeometryAnalysis }) {
   const [unit, setUnit] = useState<StlUnit>(analysis.selected_unit ?? "mm");
   const [material, setMaterial] = useState(analysis.material_label ?? "");
-  const [density, setDensity] = useState<number | null>(analysis.density_g_cm3);
+  const [density, setDensity] = useState<number | null>(analysis.density_g_cm3 ?? null);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
   const calculated = useMemo(() => {
@@ -96,7 +98,7 @@ function GeometryAnalysisCard({ analysis }: { analysis: StlGeometryAnalysis }) {
     <div className="rounded-lg border border-[var(--line)] bg-[#faf9f5] p-4">
       <div className="mb-4 grid gap-3 md:grid-cols-3">
         <label className="block text-sm">
-          <span className="mb-1 block font-medium">Unità STL</span>
+          <span className="mb-1 block font-medium">Unita STL</span>
           <select
             className="field py-2"
             value={unit}
@@ -125,7 +127,7 @@ function GeometryAnalysisCard({ analysis }: { analysis: StlGeometryAnalysis }) {
           </select>
         </label>
         <label className="block text-sm">
-          <span className="mb-1 block font-medium">Densità g/cm³</span>
+          <span className="mb-1 block font-medium">Densita g/cm3</span>
           <input
             className="field py-2"
             type="number"
@@ -148,7 +150,7 @@ function GeometryAnalysisCard({ analysis }: { analysis: StlGeometryAnalysis }) {
               <th className="py-2 pr-3">Volume</th>
               <th className="py-2 pr-3">Area</th>
               <th className="py-2 pr-3">Triangoli</th>
-              <th className="py-2 pr-3">Unità</th>
+              <th className="py-2 pr-3">Unita</th>
               <th className="py-2">Peso stimato</th>
             </tr>
           </thead>
@@ -157,8 +159,10 @@ function GeometryAnalysisCard({ analysis }: { analysis: StlGeometryAnalysis }) {
               <td className="py-3 pr-3">{formatNumber(analysis.dimensions?.x)}</td>
               <td className="py-3 pr-3">{formatNumber(analysis.dimensions?.y)}</td>
               <td className="py-3 pr-3">{formatNumber(analysis.dimensions?.z)}</td>
-              <td className="py-3 pr-3">{formatNumber(calculated.volumeCm3)} cm³</td>
-              <td className="py-3 pr-3">{formatNumber(calculated.area)} {unit}²</td>
+              <td className="py-3 pr-3">{formatNumber(calculated.volumeCm3)} cm3</td>
+              <td className="py-3 pr-3">
+                {formatNumber(calculated.area)} {unit}2
+              </td>
               <td className="py-3 pr-3">{formatInteger(analysis.triangle_count)}</td>
               <td className="py-3 pr-3">{unit}</td>
               <td className="py-3">
@@ -171,7 +175,7 @@ function GeometryAnalysisCard({ analysis }: { analysis: StlGeometryAnalysis }) {
       </div>
 
       <p className="mt-3 text-xs text-[var(--muted)]">
-        STL non contiene unità native: la select interpreta le coordinate del file.
+        STL non contiene unita native: la select interpreta le coordinate del file.
         {saveState === "saving" ? " Salvataggio..." : null}
         {saveState === "saved" ? " Valori salvati." : null}
         {saveState === "error" ? " Errore durante il salvataggio." : null}

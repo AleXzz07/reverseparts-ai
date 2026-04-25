@@ -168,9 +168,9 @@ export function NewComponentForm({
           />
         </label>
 
-        {files?.length ? (
+        {(files?.length ?? 0) > 0 ? (
           <ul className="mt-4 space-y-2 text-sm">
-            {Array.from(files).map((file) => (
+            {Array.from(files ?? []).map((file) => (
               <li key={`${file.name}-${file.size}`} className="rounded-md bg-[#eeece5] px-3 py-2">
                 {file.name}
               </li>

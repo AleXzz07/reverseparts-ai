@@ -5,6 +5,7 @@ import { BackLink } from "@/components/back-link";
 import { GenerateReportButton } from "@/components/generate-report-button";
 import { GeometryAnalysisSection } from "@/components/geometry-analysis-section";
 import { ReportSection } from "@/components/report-section";
+import { normalizeTechnicalReport } from "@/lib/ai/normalize-report";
 import { isStlFile, isTechnicalDocument } from "@/lib/files";
 import { createClient } from "@/lib/supabase/server";
 import type {
@@ -12,7 +13,6 @@ import type {
   ComponentFile,
   ComponentProject,
   StlGeometryAnalysis,
-  TechnicalReport,
 } from "@/lib/types";
 
 export default async function ComponentDetailPage({
@@ -56,8 +56,9 @@ export default async function ComponentDetailPage({
   ]);
 
   const latestReport = reports?.[0] as AiReportRow | undefined;
-  const report = latestReport?.report as TechnicalReport | undefined;
+  const report = normalizeTechnicalReport(latestReport?.report);
   const geometryRows = (geometryAnalyses as StlGeometryAnalysis[]) ?? [];
+  const fileRows = (files as ComponentFile[]) ?? [];
   const geometryByFileId = new Map(
     geometryRows.map((analysis) => [analysis.component_file_id, analysis]),
   );
@@ -89,15 +90,15 @@ export default async function ComponentDetailPage({
 
           <section className="panel p-5">
             <h2 className="mb-4 text-lg font-semibold">Documentazione tecnica</h2>
-            {files?.length ? (
+            {fileRows.length > 0 ? (
               <ul className="space-y-3">
-                {(files as ComponentFile[]).map((file) => (
+                {fileRows.map((file) => (
                   <li
                     key={file.id}
                     className="flex items-center justify-between gap-3 rounded-md bg-[#faf9f5] p-3 text-sm"
                   >
                     <span className="flex min-w-0 items-center gap-3">
-                    {file.file_type.startsWith("image/") ? (
+                    {(file.file_type ?? "").startsWith("image/") ? (
                       <FileImage aria-hidden size={18} className="text-[var(--accent)]" />
                     ) : isTechnicalDocument(file.file_name) ? (
                       <Box aria-hidden size={18} className="text-[var(--accent)]" />
