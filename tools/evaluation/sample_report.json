@@ -1,0 +1,75 @@
+{
+  "correct_fields": [
+    "part_name",
+    "material",
+    "thickness_mm",
+    "part_weight_kg",
+    "blank_weight_kg",
+    "blank_perimeter_mm",
+    "dimensions_mm.x",
+    "dimensions_mm.y",
+    "dimensions_mm.z",
+    "blank_size_mm.x",
+    "blank_size_mm.y",
+    "process_steps",
+    "features.circular_holes",
+    "features.elongated_holes",
+    "features.polygonal_holes",
+    "features.flanges"
+  ],
+  "missing_fields": [],
+  "different_fields": [],
+  "percentage_errors": {
+    "thickness_mm": 0.0,
+    "part_weight_kg": 0.0,
+    "blank_weight_kg": 0.0,
+    "blank_perimeter_mm": 0.0,
+    "dimensions_mm": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+    },
+    "blank_size_mm": {
+      "x": 0.0,
+      "y": 0.0
+    }
+  },
+  "feature_precision": {
+    "circular_holes": {
+      "expected_count": 4,
+      "actual_count": 4,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0
+    },
+    "elongated_holes": {
+      "expected_count": 2,
+      "actual_count": 2,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0
+    },
+    "polygonal_holes": {
+      "expected_count": 2,
+      "actual_count": 2,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0
+    },
+    "flanges": {
+      "expected_count": 2,
+      "actual_count": 2,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0
+    },
+    "overall": {
+      "expected_count": 10,
+      "actual_count": 10,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0
+    }
+  },
+  "final_score": 100
+}
