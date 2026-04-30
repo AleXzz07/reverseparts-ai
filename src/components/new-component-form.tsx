@@ -6,7 +6,7 @@ import { UploadCloud } from "lucide-react";
 import { createClient } from "@/lib/supabase/browser";
 import {
   getStoredContentType,
-  isCadFeatureFile,
+  isStepFile,
   isStlFile,
   isSupportedUpload,
   supportedUploadExtensions,
@@ -106,7 +106,7 @@ export function NewComponentForm({
         }
       }
 
-      if (isCadFeatureFile(file.name)) {
+      if (isStepFile(file.name)) {
         const extractionResponse = await fetch(`/api/files/${savedFile.id}/extract-cad`, {
           method: "POST",
         });
@@ -123,7 +123,6 @@ export function NewComponentForm({
           return;
         }
       }
-
     }
 
     router.push("/dashboard?created=component");

@@ -61,6 +61,10 @@ export function isCadFeatureFile(fileName: string) {
   return [".stl", ".step", ".stp"].includes(getFileExtension(fileName));
 }
 
+export function isStepFile(fileName: string) {
+  return [".step", ".stp"].includes(getFileExtension(fileName));
+}
+
 export function getStoredContentType(file: File) {
   return file.type || "application/octet-stream";
 }

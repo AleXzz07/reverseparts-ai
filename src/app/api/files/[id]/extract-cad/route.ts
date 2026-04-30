@@ -1,16 +1,11 @@
-import { execFile } from "node:child_process";
-import { randomUUID } from "node:crypto";
-import { mkdir, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { promisify } from "node:util";
 import { NextResponse } from "next/server";
-import { isCadFeatureFile } from "@/lib/files";
+import { isStepFile } from "@/lib/files";
 import { createClient } from "@/lib/supabase/server";
 import type { ComponentFile } from "@/lib/types";
 
-const execFileAsync = promisify(execFile);
 const MAX_CAD_FILE_BYTES = 80 * 1024 * 1024;
+const VERCEL_STP_FALLBACK_MESSAGE =
+  "Analisi STP avanzata non disponibile su Vercel. Serve backend Python dedicato.";
 
 export async function POST(
   _request: Request,
@@ -39,18 +34,27 @@ export async function POST(
 
   const componentFile = file as ComponentFile;
 
-  if (!isCadFeatureFile(componentFile.file_name)) {
+  if (!isStepFile(componentFile.file_name)) {
     return NextResponse.json(
-      { error: "Il file non e' supportato dal CAD feature extractor." },
+      { error: "La route CAD avanzata supporta solo file STP/STEP." },
       { status: 400 },
     );
   }
 
   if (componentFile.file_size > MAX_CAD_FILE_BYTES) {
-    return NextResponse.json(
-      { error: "Il file CAD supera il limite di 80 MB per l'estrazione automatica." },
-      { status: 400 },
-    );
+    const message = "Il file CAD supera il limite di 80 MB per l'analisi automatica.";
+    await saveFailedExtraction(componentFile, user.id, message);
+    return NextResponse.json({ status: "failed", message });
+  }
+
+  const apiUrl = process.env.CAD_ANALYSIS_API_URL?.trim();
+
+  if (!apiUrl) {
+    await saveFailedExtraction(componentFile, user.id, VERCEL_STP_FALLBACK_MESSAGE);
+    return NextResponse.json({
+      status: "fallback",
+      message: VERCEL_STP_FALLBACK_MESSAGE,
+    });
   }
 
   const { data, error: downloadError } = await supabase.storage
@@ -58,20 +62,13 @@ export async function POST(
     .download(componentFile.file_path);
 
   if (downloadError || !data) {
-    return NextResponse.json(
-      { error: `Impossibile leggere il file ${componentFile.file_name}.` },
-      { status: 500 },
-    );
+    const message = `Impossibile leggere il file ${componentFile.file_name}.`;
+    await saveFailedExtraction(componentFile, user.id, message);
+    return NextResponse.json({ status: "failed", message });
   }
 
-  const workDir = path.join(tmpdir(), `reverseparts-cad-${randomUUID()}`);
-  const inputPath = path.join(workDir, safeTempFileName(componentFile.file_name));
-
   try {
-    await mkdir(workDir, { recursive: true });
-    await writeFile(inputPath, Buffer.from(await data.arrayBuffer()));
-
-    const extractedData = await runCadExtractor(inputPath);
+    const extractedData = await sendToCadAnalysisApi(apiUrl, componentFile, data);
 
     const { error: upsertError } = await supabase.from("cad_feature_extractions").upsert(
       {
@@ -90,46 +87,65 @@ export async function POST(
       return NextResponse.json({ error: upsertError.message }, { status: 500 });
     }
 
-    return NextResponse.json({ extracted_data: extractedData });
+    return NextResponse.json({ status: "success", extracted_data: extractedData });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Errore inatteso.";
-
-    await supabase.from("cad_feature_extractions").upsert(
-      {
-        component_id: componentFile.component_id,
-        component_file_id: componentFile.id,
-        user_id: user.id,
-        status: "failed",
-        error_message: message,
-        extracted_data: null,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "component_file_id" },
-    );
-
-    return NextResponse.json({ error: message }, { status: 500 });
-  } finally {
-    await rm(workDir, { recursive: true, force: true }).catch(() => undefined);
+    const message = error instanceof Error ? error.message : "Backend CAD non disponibile.";
+    await saveFailedExtraction(componentFile, user.id, message);
+    return NextResponse.json({ status: "failed", message });
   }
 }
 
-async function runCadExtractor(inputPath: string) {
-  const scriptPath = path.join(process.cwd(), "tools", "cad_feature_extractor", "extractor.py");
-  const pythonCommand = process.env.PYTHON_BIN || "python";
-  const { stdout } = await execFileAsync(pythonCommand, [scriptPath, inputPath], {
-    cwd: process.cwd(),
-    maxBuffer: 10 * 1024 * 1024,
-    windowsHide: true,
+async function sendToCadAnalysisApi(
+  apiUrl: string,
+  file: ComponentFile,
+  data: Blob,
+) {
+  const formData = new FormData();
+  formData.append("file", data, file.file_name);
+  formData.append("component_file_id", file.id);
+  formData.append("component_id", file.component_id);
+
+  const response = await fetch(apiUrl, {
+    method: "POST",
+    body: formData,
   });
 
-  try {
-    return JSON.parse(stdout) as Record<string, unknown>;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "JSON non valido.";
-    throw new Error(`CAD extractor non ha prodotto JSON valido: ${message}`);
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(
+      `Backend CAD ha risposto ${response.status}${text ? `: ${text}` : ""}`,
+    );
   }
+
+  const payload = (await response.json()) as { extracted_data?: unknown } | unknown;
+  if (
+    payload &&
+    typeof payload === "object" &&
+    "extracted_data" in payload &&
+    (payload as { extracted_data?: unknown }).extracted_data
+  ) {
+    return (payload as { extracted_data: unknown }).extracted_data;
+  }
+
+  return payload;
 }
 
-function safeTempFileName(fileName: string) {
-  return fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
+async function saveFailedExtraction(
+  file: ComponentFile,
+  userId: string,
+  message: string,
+) {
+  const supabase = await createClient();
+  await supabase.from("cad_feature_extractions").upsert(
+    {
+      component_id: file.component_id,
+      component_file_id: file.id,
+      user_id: userId,
+      status: "failed",
+      error_message: message,
+      extracted_data: null,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "component_file_id" },
+  );
 }

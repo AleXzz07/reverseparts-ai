@@ -120,7 +120,9 @@ L'app salva densita', volume in cm3 e peso stimato in grammi/kg, che vengono pas
 
 Gli altri file CAD/3D (`.iges`, `.igs`, `.x_t`, `.x_b`, `.obj`, `.3mf`, `.dxf`, `.dwg`) vengono caricati, salvati e mostrati come documentazione tecnica, ma in questa versione non vengono parsati ne' inviati all'AI come contenuto tecnico. I file restano privati nello storage.
 
-Per `.step`, `.stp` e `.stl`, l'app prova anche l'estrazione feature CAD tramite `tools/cad_feature_extractor`. I dati vengono salvati in `cad_feature_extractions` e mostrati nel dettaglio componente. STP/STEP resta la fonte tecnica primaria; se FreeCAD/OpenCascade non sono disponibili, il tool salva warning e campi `null` senza inventare dati.
+Per `.step` e `.stp`, l'app salva il file e registra l'estrazione in `cad_feature_extractions`. Su Vercel non viene eseguito Python: se `CAD_ANALYSIS_API_URL` e' configurata, il file viene inviato a un backend Python dedicato; altrimenti viene mostrato il messaggio "Analisi STP avanzata non disponibile su Vercel. Serve backend Python dedicato." senza bloccare la creazione del componente.
+
+L'analisi STL lato Node.js resta attiva e separata.
 
 ## Roadmap AI industriale REVERSEPARTS
 
