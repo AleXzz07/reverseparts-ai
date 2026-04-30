@@ -119,6 +119,14 @@ L'app salva densita', volume in cm3 e peso stimato in grammi/kg, che vengono pas
 
 Gli altri file CAD/3D (`.step`, `.stp`, `.iges`, `.igs`, `.x_t`, `.x_b`, `.obj`, `.3mf`, `.dxf`, `.dwg`) vengono caricati, salvati e mostrati come documentazione tecnica, ma in questa versione non vengono parsati ne' inviati all'AI come contenuto tecnico. I file restano privati nello storage.
 
+## Roadmap AI industriale REVERSEPARTS
+
+- `dataset_examples`: esempi corretti e ground truth.
+- `tools/pdf_extractor`: estrazione dati da PDF tecnico.
+- `tools/cad_feature_extractor`: estrazione feature geometriche da CAD/STL.
+- `tools/evaluation`: confronto output vs ground truth.
+- Obiettivo futuro: preventivo automatico da CAD + dati storici.
+
 ## Deploy Vercel
 
 1. Importa la repository su Vercel.
