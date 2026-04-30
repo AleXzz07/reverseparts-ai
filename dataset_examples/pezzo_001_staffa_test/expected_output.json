@@ -1,0 +1,93 @@
+{
+  "part_name": "STAFFA TEST 1-1",
+  "part_type": "staffa piegata in lamiera",
+  "material": "Alluminio Novelis_Advanz_6CM_s118_1-0mm",
+  "thickness_mm": 2.0,
+  "dimensions_mm": {
+    "length": 98.0,
+    "width": 50.0,
+    "height": 49.0
+  },
+  "part_weight_kg": 0.05,
+  "blank_size_mm": {
+    "length": 195.85,
+    "width": 50.49
+  },
+  "blank_weight_kg": 0.053,
+  "blank_perimeter_mm": 491.78,
+  "holes": {
+    "circular": {
+      "count": 4,
+      "groups": [
+        {
+          "count": 2,
+          "diameter_mm": 6.99
+        },
+        {
+          "count": 2,
+          "diameter_mm": 4.99
+        }
+      ]
+    },
+    "slotted": {
+      "count": 2,
+      "groups": [
+        {
+          "count": 2,
+          "length_mm": 51.37
+        }
+      ]
+    },
+    "polygonal": {
+      "count": 2,
+      "groups": [
+        {
+          "count": 2,
+          "size_mm": 27.71
+        }
+      ]
+    }
+  },
+  "flanges": {
+    "count": 2,
+    "groups": [
+      {
+        "count": 2,
+        "type": "simple_flange",
+        "length_mm": 50.0
+      }
+    ]
+  },
+  "process_steps": [
+    "sviluppo laser 2D",
+    "piegatrice"
+  ],
+  "quote_features": {
+    "operation_count": 2,
+    "cutting_process": "sviluppo laser 2D",
+    "bending_process": "piegatrice",
+    "feature_counts": {
+      "circular_holes": 4,
+      "slotted_holes": 2,
+      "polygonal_holes": 2,
+      "flanges": 2
+    }
+  },
+  "expected_price_inputs": {
+    "material": "Alluminio Novelis_Advanz_6CM_s118_1-0mm",
+    "thickness_mm": 2.0,
+    "blank_size_mm": {
+      "length": 195.85,
+      "width": 50.49
+    },
+    "blank_weight_kg": 0.053,
+    "blank_perimeter_mm": 491.78,
+    "process_steps": [
+      "sviluppo laser 2D",
+      "piegatrice"
+    ],
+    "operation_count": 2,
+    "hole_count": 8,
+    "bend_count": 2
+  }
+}
