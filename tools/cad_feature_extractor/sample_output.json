@@ -1,0 +1,71 @@
+{
+  "file_type": "STL",
+  "dimensions_mm": {
+    "x": 98.0,
+    "y": 50.0,
+    "z": 49.0
+  },
+  "volume_cm3": 18.5185,
+  "surface_area_cm2": 220.643,
+  "estimated_weight_kg": 0.05,
+  "holes_count": 4,
+  "holes": [
+    {
+      "type": "topological_tunnel",
+      "diameter_mm": null,
+      "axis": null,
+      "confidence": "medium",
+      "id": 1
+    },
+    {
+      "type": "topological_tunnel",
+      "diameter_mm": null,
+      "axis": null,
+      "confidence": "medium",
+      "id": 2
+    },
+    {
+      "type": "topological_tunnel",
+      "diameter_mm": null,
+      "axis": null,
+      "confidence": "medium",
+      "id": 3
+    },
+    {
+      "type": "topological_tunnel",
+      "diameter_mm": null,
+      "axis": null,
+      "confidence": "medium",
+      "id": 4
+    }
+  ],
+  "bends_count": null,
+  "flanges": [],
+  "thickness_mm": null,
+  "bounding_box": {
+    "min_mm": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+    },
+    "max_mm": {
+      "x": 98.0,
+      "y": 50.0,
+      "z": 49.0
+    },
+    "center_mm": {
+      "x": 49.0,
+      "y": 25.0,
+      "z": 24.5
+    },
+    "triangle_count": 1234,
+    "vertex_count": 620,
+    "is_watertight": true
+  },
+  "complexity_score": "medium",
+  "warnings": [
+    "STL files do not store units; numeric values are interpreted as millimeters.",
+    "STL hole count is topological; diameters and axes require CAD/B-Rep analysis.",
+    "Bends, flanges and sheet thickness cannot be inferred reliably from STL alone."
+  ]
+}
