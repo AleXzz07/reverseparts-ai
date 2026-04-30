@@ -8,34 +8,7 @@ export type ComponentFile = {
   file_path: string;
   file_type: string;
   file_size: number;
-  extracted_pdf_data: PdfExtractedData | null;
   created_at: string;
-};
-
-export type PdfExtractedFeatureGroup = {
-  count: number;
-  diameter_mm?: number | null;
-  length_mm?: number | null;
-  size_mm?: number | null;
-};
-
-export type PdfExtractedData = {
-  part_name: string;
-  material: string;
-  thickness_mm: number | null;
-  dimensions_mm: { x: number | null; y: number | null; z: number | null };
-  part_weight_kg: number | null;
-  blank_size_mm: { x: number | null; y: number | null };
-  blank_weight_kg: number | null;
-  blank_perimeter_mm: number | null;
-  features: {
-    circular_holes: PdfExtractedFeatureGroup[];
-    elongated_holes: PdfExtractedFeatureGroup[];
-    polygonal_holes: PdfExtractedFeatureGroup[];
-    flanges: PdfExtractedFeatureGroup[];
-  };
-  process_steps: string[];
-  warnings: string[];
 };
 
 export type Folder = {
@@ -119,4 +92,50 @@ export type StlGeometryAnalysis = {
   holes_detected: StlDetectedHole[] | null;
   created_at: string;
   updated_at: string;
+};
+
+export type CadFeatureExtraction = {
+  id: string;
+  component_id: string;
+  component_file_id: string;
+  user_id: string;
+  status: "success" | "failed";
+  error_message: string | null;
+  extracted_data: CadFeatureData | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CadFeatureData = {
+  file_type: string;
+  dimensions_mm: { x: number | null; y: number | null; z: number | null };
+  volume_cm3: number | null;
+  surface_area_cm2: number | null;
+  estimated_weight_kg: number | null;
+  holes_count: number | null;
+  holes: CadFeatureGroup[];
+  features?: {
+    circular_holes: CadFeatureGroup[];
+    elongated_holes: CadFeatureGroup[];
+    polygonal_holes: CadFeatureGroup[];
+    flanges: CadFeatureGroup[];
+  };
+  bends_count: number | null;
+  flanges: CadFeatureGroup[];
+  thickness_mm: number | null;
+  bounding_box: Record<string, unknown>;
+  complexity_score: "low" | "medium" | "high" | "unknown";
+  warnings: string[];
+};
+
+export type CadFeatureGroup = {
+  type?: string;
+  count?: number;
+  diameter_mm?: number | null;
+  length_mm?: number | null;
+  size_mm?: number | null;
+  radius_mm?: number | null;
+  confidence?: string;
+  source?: string;
+  axis?: GeometryVector | null;
 };

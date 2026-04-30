@@ -1,13 +1,15 @@
 # PDF Extractor
 
-Standalone Python tool for extracting declared technical data from PDF quote or analysis documents, including examples such as `STAFFA TEST 1-1`.
+Standalone Python support tool for extracting declared technical data from PDF quote or analysis documents, including examples such as `STAFFA TEST 1-1`.
+
+PDF is not the primary technical source for REVERSEPARTS. STP/STEP CAD extraction is the primary path; PDF output is used as ground truth or validation data when comparing CAD extraction accuracy.
 
 The extractor is conservative by design:
 
 - missing values remain `null` or empty arrays;
 - no technical data is inferred when it is not present in the PDF text;
 - warnings are emitted when PDF text extraction is poor or expected fields are missing;
-- the module is not connected to the application yet.
+- the module is not connected to the application.
 
 ## Install
 

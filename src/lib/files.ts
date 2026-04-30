@@ -57,8 +57,8 @@ export function isStlFile(fileName: string) {
   return getFileExtension(fileName) === ".stl";
 }
 
-export function isPdfFile(fileName: string, contentType?: string | null) {
-  return contentType === "application/pdf" || getFileExtension(fileName) === ".pdf";
+export function isCadFeatureFile(fileName: string) {
+  return [".stl", ".step", ".stp"].includes(getFileExtension(fileName));
 }
 
 export function getStoredContentType(file: File) {

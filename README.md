@@ -11,6 +11,7 @@ Web app Next.js per caricare foto, PDF e note tecniche di un componente meccanic
 - Creazione nuovo componente
 - Eliminazione componenti con rimozione file Storage e report AI collegati
 - Upload immagini, PDF e file CAD/3D su Supabase Storage privato
+- Estrazione feature CAD/STP/STL tramite `tools/cad_feature_extractor`
 - Analisi geometrica server-side per file STL
 - Campo note tecniche
 - Generazione scheda AI con OpenAI Responses API
@@ -117,14 +118,18 @@ Nella pagina dettaglio puoi scegliere l'unita' STL (`mm`, `cm`, `m`, `inch`) e u
 
 L'app salva densita', volume in cm3 e peso stimato in grammi/kg, che vengono passati al prompt AI come dati geometrici rilevati.
 
-Gli altri file CAD/3D (`.step`, `.stp`, `.iges`, `.igs`, `.x_t`, `.x_b`, `.obj`, `.3mf`, `.dxf`, `.dwg`) vengono caricati, salvati e mostrati come documentazione tecnica, ma in questa versione non vengono parsati ne' inviati all'AI come contenuto tecnico. I file restano privati nello storage.
+Gli altri file CAD/3D (`.iges`, `.igs`, `.x_t`, `.x_b`, `.obj`, `.3mf`, `.dxf`, `.dwg`) vengono caricati, salvati e mostrati come documentazione tecnica, ma in questa versione non vengono parsati ne' inviati all'AI come contenuto tecnico. I file restano privati nello storage.
+
+Per `.step`, `.stp` e `.stl`, l'app prova anche l'estrazione feature CAD tramite `tools/cad_feature_extractor`. I dati vengono salvati in `cad_feature_extractions` e mostrati nel dettaglio componente. STP/STEP resta la fonte tecnica primaria; se FreeCAD/OpenCascade non sono disponibili, il tool salva warning e campi `null` senza inventare dati.
 
 ## Roadmap AI industriale REVERSEPARTS
 
 - `dataset_examples`: esempi corretti e ground truth.
-- `tools/pdf_extractor`: estrazione dati da PDF tecnico.
-- `tools/cad_feature_extractor`: estrazione feature geometriche da CAD/STL.
-- `tools/evaluation`: confronto output vs ground truth.
+- `tools/cad_feature_extractor`: fonte dati primaria da STP/STEP e CAD/STL.
+- `tools/pdf_extractor`: supporto per leggere PDF tecnici come ground truth.
+- `tools/evaluation`: confronto output CAD vs `expected_output.json` o dati PDF validati.
+- STP = fonte principale per dimensioni, volume, feature e complessita' geometrica.
+- PDF/expected output = riferimento per verificare se l'estrazione CAD e' corretta.
 - Obiettivo futuro: preventivo automatico da CAD + dati storici.
 
 ## Deploy Vercel

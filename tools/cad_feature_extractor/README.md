@@ -4,11 +4,14 @@ Standalone Python tool for extracting geometric features from CAD/3D files for R
 
 This module is not connected to the Next.js app.
 
+STP/STEP is the primary technical data source. PDF files and `expected_output.json`
+are ground truth references used to validate whether CAD extraction is correct.
+
 ## Supported Inputs
 
-- STL via `trimesh`
 - STEP/STP via FreeCAD Python if available
 - STEP/STP via `pythonocc-core`/OpenCascade if available
+- STL via `trimesh` as a secondary mesh fallback
 
 If a STEP/STP parser is not available locally, the extractor still returns the required JSON contract with `null` values and warnings. It does not invent technical data.
 
@@ -45,13 +48,13 @@ python -c "from OCC.Core.STEPControl import STEPControl_Reader; print('pythonocc
 ## Usage
 
 ```bash
-python extractor.py path/to/part.stl --pretty
+python extractor.py path/to/part.stp --pretty
 ```
 
 With material density for weight estimation:
 
 ```bash
-python extractor.py path/to/part.stl --density-g-cm3 2.7 --pretty
+python extractor.py path/to/part.stp --density-g-cm3 2.7 --pretty
 ```
 
 Common densities:
@@ -74,6 +77,12 @@ The tool emits JSON with this shape:
   "estimated_weight_kg": null,
   "holes_count": null,
   "holes": [],
+  "features": {
+    "circular_holes": [],
+    "elongated_holes": [],
+    "polygonal_holes": [],
+    "flanges": []
+  },
   "bends_count": null,
   "flanges": [],
   "thickness_mm": null,
@@ -86,8 +95,10 @@ The tool emits JSON with this shape:
 ## Extraction Rules
 
 - Missing data remains `null`, `{}` or `[]`.
+- STEP/STP is the primary source for dimensions, volume, area, holes, bends, flanges and sheet thickness.
+- STEP/STP extraction uses local FreeCAD/OpenCascade capabilities when available.
+- Sheet thickness, bends and typed holes are reported only when they are deducible from geometry.
 - STL units are not stored in the file; values are interpreted as millimeters.
 - STL extraction calculates bounding box, volume when watertight, surface area and triangle count.
 - STL hole detection is topological and cannot determine parametric hole diameters.
 - Bends, flanges and sheet thickness are not inferred from STL.
-- STEP/STP feature recognition depends on the available local CAD kernel.

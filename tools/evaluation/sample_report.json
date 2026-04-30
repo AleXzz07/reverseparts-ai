@@ -1,37 +1,39 @@
 {
+  "evaluation_type": "cad_extraction_accuracy",
   "correct_fields": [
-    "part_name",
-    "material",
     "thickness_mm",
     "part_weight_kg",
-    "blank_weight_kg",
-    "blank_perimeter_mm",
     "dimensions_mm.x",
     "dimensions_mm.y",
     "dimensions_mm.z",
-    "blank_size_mm.x",
-    "blank_size_mm.y",
-    "process_steps",
     "features.circular_holes",
     "features.elongated_holes",
     "features.polygonal_holes",
     "features.flanges"
   ],
-  "missing_fields": [],
+  "missing_fields": [
+    "part_name",
+    "material",
+    "blank_weight_kg",
+    "blank_perimeter_mm",
+    "blank_size_mm.x",
+    "blank_size_mm.y",
+    "process_steps"
+  ],
   "different_fields": [],
   "percentage_errors": {
     "thickness_mm": 0.0,
     "part_weight_kg": 0.0,
-    "blank_weight_kg": 0.0,
-    "blank_perimeter_mm": 0.0,
+    "blank_weight_kg": null,
+    "blank_perimeter_mm": null,
     "dimensions_mm": {
       "x": 0.0,
       "y": 0.0,
       "z": 0.0
     },
     "blank_size_mm": {
-      "x": 0.0,
-      "y": 0.0
+      "x": null,
+      "y": null
     }
   },
   "feature_precision": {
@@ -71,5 +73,6 @@
       "f1": 1.0
     }
   },
-  "final_score": 100
+  "cad_accuracy_score": 82,
+  "final_score": 82
 }

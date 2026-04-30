@@ -1,5 +1,5 @@
 {
-  "file_type": "STL",
+  "file_type": "STP",
   "dimensions_mm": {
     "x": 98.0,
     "y": 50.0,
@@ -11,37 +11,78 @@
   "holes_count": 4,
   "holes": [
     {
-      "type": "topological_tunnel",
-      "diameter_mm": null,
+      "type": "circular_hole_candidate",
+      "count": 2,
+      "diameter_mm": 6.99,
       "axis": null,
-      "confidence": "medium",
-      "id": 1
+      "confidence": "low",
+      "source": "FreeCAD cylindrical face"
     },
     {
-      "type": "topological_tunnel",
-      "diameter_mm": null,
+      "type": "circular_hole_candidate",
+      "count": 2,
+      "diameter_mm": 4.99,
       "axis": null,
-      "confidence": "medium",
-      "id": 2
-    },
-    {
-      "type": "topological_tunnel",
-      "diameter_mm": null,
-      "axis": null,
-      "confidence": "medium",
-      "id": 3
-    },
-    {
-      "type": "topological_tunnel",
-      "diameter_mm": null,
-      "axis": null,
-      "confidence": "medium",
-      "id": 4
+      "confidence": "low",
+      "source": "FreeCAD cylindrical face"
     }
   ],
-  "bends_count": null,
-  "flanges": [],
-  "thickness_mm": null,
+  "features": {
+    "circular_holes": [
+      {
+        "type": "circular_hole_candidate",
+        "count": 2,
+        "diameter_mm": 6.99,
+        "axis": null,
+        "confidence": "low",
+        "source": "FreeCAD cylindrical face"
+      },
+      {
+        "type": "circular_hole_candidate",
+        "count": 2,
+        "diameter_mm": 4.99,
+        "axis": null,
+        "confidence": "low",
+        "source": "FreeCAD cylindrical face"
+      }
+    ],
+    "elongated_holes": [
+      {
+        "count": 2,
+        "length_mm": 51.37,
+        "confidence": "low"
+      }
+    ],
+    "polygonal_holes": [
+      {
+        "count": 2,
+        "size_mm": 27.71,
+        "confidence": "low"
+      }
+    ],
+    "flanges": [
+      {
+        "type": "bend_or_flange_candidate",
+        "count": 2,
+        "radius_mm": null,
+        "length_mm": 50.0,
+        "confidence": "low",
+        "source": "FreeCAD cylindrical non-hole face"
+      }
+    ]
+  },
+  "bends_count": 2,
+  "flanges": [
+    {
+      "type": "bend_or_flange_candidate",
+      "count": 2,
+      "radius_mm": null,
+      "length_mm": 50.0,
+      "confidence": "low",
+      "source": "FreeCAD cylindrical non-hole face"
+    }
+  ],
+  "thickness_mm": 2.0,
   "bounding_box": {
     "min_mm": {
       "x": 0.0,
@@ -58,14 +99,12 @@
       "y": 25.0,
       "z": 24.5
     },
-    "triangle_count": 1234,
-    "vertex_count": 620,
-    "is_watertight": true
+    "faces_count": 128,
+    "edges_count": 356
   },
   "complexity_score": "medium",
   "warnings": [
-    "STL files do not store units; numeric values are interpreted as millimeters.",
-    "STL hole count is topological; diameters and axes require CAD/B-Rep analysis.",
-    "Bends, flanges and sheet thickness cannot be inferred reliably from STL alone."
+    "Circular holes are detected from cylindrical STEP faces and should be validated against ground truth.",
+    "Sheet thickness is estimated from repeated planar face offsets."
   ]
 }

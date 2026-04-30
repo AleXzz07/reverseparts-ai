@@ -2,15 +2,16 @@ import { notFound, redirect } from "next/navigation";
 import { Box, File, FileImage } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { BackLink } from "@/components/back-link";
+import { CadFeatureExtractionSection } from "@/components/cad-feature-extraction-section";
 import { GenerateReportButton } from "@/components/generate-report-button";
 import { GeometryAnalysisSection } from "@/components/geometry-analysis-section";
-import { PdfExtractedDataSection } from "@/components/pdf-extracted-data-section";
 import { ReportSection } from "@/components/report-section";
 import { normalizeTechnicalReport } from "@/lib/ai/normalize-report";
-import { isStlFile, isTechnicalDocument } from "@/lib/files";
+import { isCadFeatureFile, isStlFile, isTechnicalDocument } from "@/lib/files";
 import { createClient } from "@/lib/supabase/server";
 import type {
   AiReportRow,
+  CadFeatureExtraction,
   ComponentFile,
   ComponentProject,
   StlGeometryAnalysis,
@@ -41,7 +42,12 @@ export default async function ComponentDetailPage({
     notFound();
   }
 
-  const [{ data: files }, { data: reports }, { data: geometryAnalyses }] = await Promise.all([
+  const [
+    { data: files },
+    { data: reports },
+    { data: geometryAnalyses },
+    { data: cadFeatureExtractions },
+  ] = await Promise.all([
     supabase.from("component_files").select("*").eq("component_id", id).order("created_at"),
     supabase
       .from("ai_reports")
@@ -54,14 +60,24 @@ export default async function ComponentDetailPage({
       .select("*")
       .eq("component_id", id)
       .order("created_at"),
+    supabase
+      .from("cad_feature_extractions")
+      .select("*")
+      .eq("component_id", id)
+      .order("created_at"),
   ]);
 
   const latestReport = reports?.[0] as AiReportRow | undefined;
   const report = normalizeTechnicalReport(latestReport?.report);
   const geometryRows = (geometryAnalyses as StlGeometryAnalysis[]) ?? [];
+  const cadExtractionRows = (cadFeatureExtractions as CadFeatureExtraction[]) ?? [];
   const fileRows = (files as ComponentFile[]) ?? [];
+  const filesById = new Map(fileRows.map((file) => [file.id, file]));
   const geometryByFileId = new Map(
     geometryRows.map((analysis) => [analysis.component_file_id, analysis]),
+  );
+  const cadExtractionByFileId = new Map(
+    cadExtractionRows.map((extraction) => [extraction.component_file_id, extraction]),
   );
 
   return (
@@ -108,7 +124,15 @@ export default async function ComponentDetailPage({
                     )}
                     <span className="break-all">{file.file_name}</span>
                     </span>
-                    {isStlFile(file.file_name) && geometryByFileId.get(file.id)?.status === "failed" ? (
+                    {isCadFeatureFile(file.file_name) && cadExtractionByFileId.get(file.id)?.status === "failed" ? (
+                      <span className="shrink-0 rounded-full bg-red-100 px-2 py-1 text-xs font-semibold text-red-700">
+                        CAD errore
+                      </span>
+                    ) : isCadFeatureFile(file.file_name) && cadExtractionByFileId.get(file.id)?.status === "success" ? (
+                      <span className="shrink-0 rounded-full bg-[#e2eee8] px-2 py-1 text-xs font-semibold text-[var(--accent-strong)]">
+                        CAD estratto
+                      </span>
+                    ) : isStlFile(file.file_name) && geometryByFileId.get(file.id)?.status === "failed" ? (
                       <span className="shrink-0 rounded-full bg-red-100 px-2 py-1 text-xs font-semibold text-red-700">
                         STL errore
                       </span>
@@ -128,7 +152,10 @@ export default async function ComponentDetailPage({
               <p className="text-sm text-[var(--muted)]">Nessun file caricato.</p>
             )}
           </section>
-          <PdfExtractedDataSection files={fileRows} />
+          <CadFeatureExtractionSection
+            extractions={cadExtractionRows}
+            filesById={filesById}
+          />
           <GeometryAnalysisSection analyses={geometryRows} />
         </aside>
 

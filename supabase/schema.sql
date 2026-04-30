@@ -31,12 +31,8 @@ create table if not exists public.component_files (
   file_path text not null,
   file_type text not null,
   file_size bigint not null default 0,
-  extracted_pdf_data jsonb,
   created_at timestamptz not null default now()
 );
-
-alter table public.component_files
-add column if not exists extracted_pdf_data jsonb;
 
 create table if not exists public.ai_reports (
   id uuid primary key default gen_random_uuid(),
@@ -72,6 +68,19 @@ create table if not exists public.stl_geometry_analyses (
   unique(component_file_id)
 );
 
+create table if not exists public.cad_feature_extractions (
+  id uuid primary key default gen_random_uuid(),
+  component_id uuid not null references public.components(id) on delete cascade,
+  component_file_id uuid not null references public.component_files(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  status text not null check (status in ('success', 'failed')),
+  error_message text,
+  extracted_data jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique(component_file_id)
+);
+
 alter table public.stl_geometry_analyses
 add column if not exists selected_unit text not null default 'mm' check (selected_unit in ('mm', 'cm', 'm', 'inch')),
 add column if not exists material_label text,
@@ -87,12 +96,14 @@ create index if not exists components_folder_created_idx on public.components(fo
 create index if not exists component_files_component_idx on public.component_files(component_id);
 create index if not exists ai_reports_component_created_idx on public.ai_reports(component_id, created_at desc);
 create index if not exists stl_geometry_component_idx on public.stl_geometry_analyses(component_id);
+create index if not exists cad_feature_extractions_component_idx on public.cad_feature_extractions(component_id);
 
 alter table public.folders enable row level security;
 alter table public.components enable row level security;
 alter table public.component_files enable row level security;
 alter table public.ai_reports enable row level security;
 alter table public.stl_geometry_analyses enable row level security;
+alter table public.cad_feature_extractions enable row level security;
 
 drop policy if exists "Users can manage own folders" on public.folders;
 create policy "Users can manage own folders"
@@ -132,6 +143,12 @@ with check (auth.uid() = user_id);
 drop policy if exists "Users can manage own STL geometry analyses" on public.stl_geometry_analyses;
 create policy "Users can manage own STL geometry analyses"
 on public.stl_geometry_analyses for all
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+drop policy if exists "Users can manage own CAD feature extractions" on public.cad_feature_extractions;
+create policy "Users can manage own CAD feature extractions"
+on public.cad_feature_extractions for all
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
 

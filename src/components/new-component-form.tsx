@@ -6,7 +6,7 @@ import { UploadCloud } from "lucide-react";
 import { createClient } from "@/lib/supabase/browser";
 import {
   getStoredContentType,
-  isPdfFile,
+  isCadFeatureFile,
   isStlFile,
   isSupportedUpload,
   supportedUploadExtensions,
@@ -106,8 +106,8 @@ export function NewComponentForm({
         }
       }
 
-      if (isPdfFile(file.name, contentType)) {
-        const extractionResponse = await fetch(`/api/files/${savedFile.id}/extract-pdf`, {
+      if (isCadFeatureFile(file.name)) {
+        const extractionResponse = await fetch(`/api/files/${savedFile.id}/extract-cad`, {
           method: "POST",
         });
 
@@ -117,12 +117,13 @@ export function NewComponentForm({
             | null;
           setError(
             payload?.error ??
-              `Il PDF ${file.name} e' stato caricato ma i dati non sono estraibili.`,
+              `Il file CAD ${file.name} e' stato caricato ma non e' estraibile.`,
           );
           setLoading(false);
           return;
         }
       }
+
     }
 
     router.push("/dashboard?created=component");

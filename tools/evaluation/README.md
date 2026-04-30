@@ -1,6 +1,6 @@
 # Evaluation Tool
 
-Standalone evaluator for comparing REVERSEPARTS extractor output against dataset ground truth.
+Standalone evaluator for scoring REVERSEPARTS CAD extraction output against ground truth.
 
 It is not connected to the Next.js app.
 
@@ -8,8 +8,8 @@ It is not connected to the Next.js app.
 
 Compare:
 
-1. `dataset_examples/pezzo_001_staffa_test/expected_output.json`
-2. JSON produced by `tools/pdf_extractor` or `tools/cad_feature_extractor`
+1. JSON produced by `tools/cad_feature_extractor`
+2. `dataset_examples/pezzo_001_staffa_test/expected_output.json` or PDF-derived ground truth
 
 The report is emitted as JSON and includes:
 
@@ -18,21 +18,21 @@ The report is emitted as JSON and includes:
 - different fields;
 - percentage error for dimensions, weight, thickness and blank data;
 - hole/flange recognition precision;
-- final score from `0` to `100`.
+- CAD extraction accuracy score from `0` to `100`.
 
 ## Usage
 
 ```bash
 python tools/evaluation/evaluate.py \
+  tools/cad_feature_extractor/sample_output.json \
   dataset_examples/pezzo_001_staffa_test/expected_output.json \
-  tools/pdf_extractor/sample_output.json \
   --pretty
 ```
 
 Write the report to a file:
 
 ```bash
-python tools/evaluation/evaluate.py expected_output.json extracted_output.json \
+python tools/evaluation/evaluate.py cad_output.json expected_output.json \
   --pretty \
   --output report.json
 ```
@@ -46,3 +46,4 @@ The final score combines:
 - feature recognition F1 score: `25%`.
 
 Missing values remain missing; the evaluator does not infer technical data.
+PDF extractor output can be used to prepare ground truth, but it is not the primary extraction target.

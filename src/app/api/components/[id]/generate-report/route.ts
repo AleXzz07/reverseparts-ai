@@ -4,7 +4,12 @@ import type { ResponseInputContent } from "openai/resources/responses/responses"
 import { reportSystemPrompt, jsonSchema, technicalReportSchema } from "@/lib/ai/report-schema";
 import { aiReadableMimeTypes, isTechnicalDocument } from "@/lib/files";
 import { createClient } from "@/lib/supabase/server";
-import type { ComponentFile, ComponentProject, StlGeometryAnalysis } from "@/lib/types";
+import type {
+  CadFeatureExtraction,
+  ComponentFile,
+  ComponentProject,
+  StlGeometryAnalysis,
+} from "@/lib/types";
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
 
@@ -91,6 +96,16 @@ export async function POST(
       return NextResponse.json({ error: geometryError.message }, { status: 500 });
     }
 
+    const { data: cadFeatureExtractions, error: cadFeatureError } = await supabase
+      .from("cad_feature_extractions")
+      .select("*")
+      .eq("component_id", id)
+      .order("created_at");
+
+    if (cadFeatureError) {
+      return NextResponse.json({ error: cadFeatureError.message }, { status: 500 });
+    }
+
     const content: ResponseInputContent[] = [
       {
         type: "input_text",
@@ -103,6 +118,9 @@ Note tecniche dell'utente:
 ${(component as ComponentProject).notes || "Nessuna nota tecnica fornita."}
 
 File allegati: ${(files as ComponentFile[] | null)?.map((file) => `${file.file_name} (${describeFileForPrompt(file)})`).join(", ") || "nessuno"}.
+
+Dati CAD/STP estratti come fonte primaria:
+${formatCadFeaturesForPrompt((cadFeatureExtractions as CadFeatureExtraction[] | null) ?? [])}
 
 Dati geometrici STL calcolati lato server:
 ${formatGeometryForPrompt((geometryAnalyses as StlGeometryAnalysis[] | null) ?? [])}
@@ -179,8 +197,12 @@ ${formatGeometryForPrompt((geometryAnalyses as StlGeometryAnalysis[] | null) ?? 
 }
 
 function describeFileForPrompt(file: ComponentFile) {
+  if (file.file_name.toLowerCase().endsWith(".stp") || file.file_name.toLowerCase().endsWith(".step")) {
+    return "file STP/STEP; fonte primaria se l'estrazione CAD e' disponibile";
+  }
+
   if (file.file_name.toLowerCase().endsWith(".stl")) {
-    return "file STL; usare l'analisi geometrica calcolata se presente";
+    return "file STL; usare l'estrazione CAD/STL o l'analisi geometrica calcolata se presente";
   }
 
   if (isTechnicalDocument(file.file_name)) {
@@ -188,6 +210,70 @@ function describeFileForPrompt(file: ComponentFile) {
   }
 
   return file.file_type;
+}
+
+function formatCadFeaturesForPrompt(extractions: CadFeatureExtraction[]) {
+  if (!extractions.length) {
+    return "Nessuna estrazione CAD/STP disponibile.";
+  }
+
+  return extractions
+    .map((extraction, index) => {
+      if (extraction.status === "failed") {
+        return `CAD ${index + 1}: estrazione fallita. Errore: ${
+          extraction.error_message ?? "errore non specificato"
+        }.`;
+      }
+
+      const data = extraction.extracted_data;
+      if (!data) {
+        return `CAD ${index + 1}: nessun dato estratto.`;
+      }
+
+      return [
+        `CAD ${index + 1} (${data.file_type}):`,
+        `- dimensioni X/Y/Z: ${formatNullableVector(data.dimensions_mm)}`,
+        `- volume: ${formatNumber(data.volume_cm3)} cm3`,
+        `- area: ${formatNumber(data.surface_area_cm2)} cm2`,
+        `- spessore lamiera: ${formatNumber(data.thickness_mm)} mm`,
+        `- peso stimato: ${formatNumber(data.estimated_weight_kg)} kg`,
+        `- fori totali: ${data.holes_count ?? "n/d"}`,
+        `- fori circolari: ${formatCadGroups(data.features?.circular_holes ?? [], "diameter_mm")}`,
+        `- fori asolati: ${formatCadGroups(data.features?.elongated_holes ?? [], "length_mm")}`,
+        `- fori poligonali: ${formatCadGroups(data.features?.polygonal_holes ?? [], "size_mm")}`,
+        `- flange/pieghe: ${formatCadGroups(data.features?.flanges ?? data.flanges, "length_mm")}`,
+        `- complessita': ${data.complexity_score}`,
+        `- warning: ${data.warnings.length ? data.warnings.join(" ") : "nessuno"}`,
+      ].join("\n");
+    })
+    .join("\n\n");
+}
+
+function formatCadGroups(
+  groups: NonNullable<CadFeatureExtraction["extracted_data"]>["holes"],
+  metric: "diameter_mm" | "length_mm" | "size_mm",
+) {
+  if (!groups.length) {
+    return "nessuno";
+  }
+
+  return groups
+    .slice(0, 12)
+    .map((group) => {
+      const count = group.count ?? 1;
+      const value = group[metric];
+      const metricLabel = typeof value === "number" ? ` da ${formatNumber(value)} mm` : "";
+      return `${count}${metricLabel}`;
+    })
+    .join("; ");
+}
+
+function formatNullableVector(vector: { x: number | null; y: number | null; z: number | null }) {
+  if ([vector.x, vector.y, vector.z].some((value) => value === null)) {
+    return "n/d";
+  }
+
+  return `${formatNumber(vector.x)} / ${formatNumber(vector.y)} / ${formatNumber(vector.z)}`;
 }
 
 function formatGeometryForPrompt(analyses: StlGeometryAnalysis[]) {

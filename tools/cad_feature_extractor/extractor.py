@@ -29,6 +29,12 @@ def empty_output(file_type: str = "") -> dict[str, Any]:
         "estimated_weight_kg": None,
         "holes_count": None,
         "holes": [],
+        "features": {
+            "circular_holes": [],
+            "elongated_holes": [],
+            "polygonal_holes": [],
+            "flanges": [],
+        },
         "bends_count": None,
         "flanges": [],
         "thickness_mm": None,
@@ -127,6 +133,12 @@ def extract_stl(
             "estimated_weight_kg": estimate_weight(volume_cm3, material_density_g_cm3),
             "holes_count": hole_result["holes_count"],
             "holes": hole_result["holes"],
+            "features": {
+                "circular_holes": [],
+                "elongated_holes": [],
+                "polygonal_holes": [],
+                "flanges": [],
+            },
             "bends_count": None,
             "flanges": [],
             "thickness_mm": None,
@@ -159,7 +171,10 @@ def extract_stl(
     )
 
     output["warnings"].append(
-        "Bends, flanges and sheet thickness cannot be inferred reliably from STL alone."
+        "STL is secondary for this workflow; use STP/STEP as the primary source for CAD features."
+    )
+    output["warnings"].append(
+        "Bends, flanges, typed holes and sheet thickness cannot be inferred reliably from STL alone."
     )
     return output
 
@@ -206,7 +221,15 @@ def extract_step_with_freecad(
         surface_area_cm2 = float(shape.Area) / 100.0 if shape.Area else None
         faces_count = len(shape.Faces)
         edges_count = len(shape.Edges)
-        holes = detect_cylindrical_holes_freecad(shape)
+        hole_features = detect_holes_freecad(shape)
+        bend_features = detect_bends_and_flanges_freecad(shape, hole_features["circular_holes"])
+        thickness_result = estimate_sheet_thickness_freecad(shape)
+        holes = (
+            hole_features["circular_holes"]
+            + hole_features["elongated_holes"]
+            + hole_features["polygonal_holes"]
+        )
+        holes_count = feature_count(holes)
     except Exception as exc:
         output["warnings"].append(f"FreeCAD could not analyze STEP file: {exc}")
         return output
@@ -221,8 +244,17 @@ def extract_step_with_freecad(
             "volume_cm3": round_nullable(volume_cm3),
             "surface_area_cm2": round_nullable(surface_area_cm2),
             "estimated_weight_kg": estimate_weight(volume_cm3, material_density_g_cm3),
-            "holes_count": len(holes),
+            "holes_count": holes_count,
             "holes": holes,
+            "features": {
+                "circular_holes": hole_features["circular_holes"],
+                "elongated_holes": hole_features["elongated_holes"],
+                "polygonal_holes": hole_features["polygonal_holes"],
+                "flanges": bend_features["flanges"],
+            },
+            "bends_count": len(bend_features["flanges"]),
+            "flanges": bend_features["flanges"],
+            "thickness_mm": thickness_result["thickness_mm"],
             "bounding_box": {
                 "min_mm": {
                     "x": round_number(bbox.XMin),
@@ -239,14 +271,14 @@ def extract_step_with_freecad(
             },
             "complexity_score": score_complexity(
                 triangle_count=faces_count,
-                holes_count=len(holes),
-                has_bends=False,
+                holes_count=holes_count,
+                has_bends=bool(bend_features["flanges"]),
             ),
         }
     )
-    output["warnings"].append(
-        "Bends, flanges and thickness require sheet-metal feature recognition and are not inferred."
-    )
+    output["warnings"].extend(hole_features["warnings"])
+    output["warnings"].extend(bend_features["warnings"])
+    output["warnings"].extend(thickness_result["warnings"])
     return output
 
 
@@ -301,6 +333,15 @@ def extract_step_with_pythonocc(
             "estimated_weight_kg": estimate_weight(volume_cm3, material_density_g_cm3),
             "holes_count": None,
             "holes": [],
+            "features": {
+                "circular_holes": [],
+                "elongated_holes": [],
+                "polygonal_holes": [],
+                "flanges": [],
+            },
+            "bends_count": None,
+            "flanges": [],
+            "thickness_mm": None,
             "bounding_box": {
                 "min_mm": {
                     "x": round_number(xmin),
@@ -322,8 +363,8 @@ def extract_step_with_pythonocc(
     return output
 
 
-def detect_cylindrical_holes_freecad(shape: Any) -> list[dict[str, Any]]:
-    holes: list[dict[str, Any]] = []
+def detect_holes_freecad(shape: Any) -> dict[str, Any]:
+    circular_holes: list[dict[str, Any]] = []
     seen: set[tuple[float, float, float, float]] = set()
 
     for face in getattr(shape, "Faces", []):
@@ -345,9 +386,10 @@ def detect_cylindrical_holes_freecad(shape: Any) -> list[dict[str, Any]]:
         if key in seen:
             continue
         seen.add(key)
-        holes.append(
+        circular_holes.append(
             {
-                "type": "cylindrical_surface",
+                "type": "circular_hole_candidate",
+                "count": 1,
                 "diameter_mm": round_number(float(radius) * 2.0),
                 "axis": {
                     "x": round_number(float(getattr(direction, "x", 0.0))),
@@ -355,10 +397,158 @@ def detect_cylindrical_holes_freecad(shape: Any) -> list[dict[str, Any]]:
                     "z": round_number(float(getattr(direction, "z", 0.0))),
                 },
                 "confidence": "low",
+                "source": "FreeCAD cylindrical face",
             }
         )
 
-    return holes
+    grouped_circular_holes = group_feature_candidates(circular_holes, "diameter_mm")
+
+    warnings: list[str] = []
+    if grouped_circular_holes:
+        warnings.append(
+            "Circular holes are detected from cylindrical STEP faces and should be validated against ground truth."
+        )
+    else:
+        warnings.append("No circular holes were detected from STEP cylindrical faces.")
+
+    warnings.append(
+        "Elongated and polygonal hole detection needs explicit B-Rep contour recognition; left empty when not deducible."
+    )
+
+    return {
+        "circular_holes": grouped_circular_holes,
+        "elongated_holes": [],
+        "polygonal_holes": [],
+        "warnings": warnings,
+    }
+
+
+def group_feature_candidates(
+    features: list[dict[str, Any]],
+    metric_key: str,
+) -> list[dict[str, Any]]:
+    grouped: dict[float | None, dict[str, Any]] = {}
+
+    for feature in features:
+        metric = feature.get(metric_key)
+        key = round(float(metric), 4) if isinstance(metric, (int, float)) else None
+        if key not in grouped:
+            grouped[key] = {**feature, "count": 0}
+        grouped[key]["count"] += int(feature.get("count") or 1)
+
+    return list(grouped.values())
+
+
+def feature_count(features: list[dict[str, Any]]) -> int:
+    return sum(int(feature.get("count") or 0) for feature in features)
+
+
+def detect_bends_and_flanges_freecad(
+    shape: Any,
+    circular_holes: list[dict[str, Any]],
+) -> dict[str, Any]:
+    circular_diameters = {
+        round(float(hole["diameter_mm"]), 4)
+        for hole in circular_holes
+        if isinstance(hole.get("diameter_mm"), (int, float))
+    }
+    flanges: list[dict[str, Any]] = []
+    seen: set[tuple[float, float, float]] = set()
+
+    for face in getattr(shape, "Faces", []):
+        surface = getattr(face, "Surface", None)
+        radius = getattr(surface, "Radius", None)
+        axis = getattr(surface, "Axis", None)
+        if radius is None or axis is None:
+            continue
+
+        diameter = round(float(radius) * 2.0, 4)
+        if diameter in circular_diameters:
+            continue
+
+        area = float(getattr(face, "Area", 0.0) or 0.0)
+        if area <= 0:
+            continue
+
+        location = getattr(axis, "Location", None)
+        key = (
+            round(float(radius), 4),
+            round(float(getattr(location, "x", 0.0)), 3),
+            round(float(getattr(location, "y", 0.0)), 3),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        flanges.append(
+            {
+                "type": "bend_or_flange_candidate",
+                "count": 1,
+                "radius_mm": round_number(float(radius)),
+                "length_mm": None,
+                "confidence": "low",
+                "source": "FreeCAD cylindrical non-hole face",
+            }
+        )
+
+    warnings: list[str] = []
+    if flanges:
+        warnings.append(
+            "Bends/flanges are low-confidence candidates from non-hole cylindrical faces."
+        )
+    else:
+        warnings.append("No bends/flanges were deducible from STEP geometry.")
+
+    return {"flanges": flanges, "warnings": warnings}
+
+
+def estimate_sheet_thickness_freecad(shape: Any) -> dict[str, Any]:
+    distances: list[float] = []
+    planar_faces: list[Any] = []
+
+    for face in getattr(shape, "Faces", []):
+        surface = getattr(face, "Surface", None)
+        if surface and surface.__class__.__name__.lower().endswith("plane"):
+            planar_faces.append(face)
+
+    for index, first in enumerate(planar_faces):
+        for second in planar_faces[index + 1 :]:
+            distance = face_distance(first, second)
+            if distance is not None and 0.1 <= distance <= 20:
+                distances.append(round_number(distance))
+
+    if not distances:
+        return {
+            "thickness_mm": None,
+            "warnings": ["Sheet thickness was not deducible from parallel planar faces."],
+        }
+
+    buckets: dict[float, int] = {}
+    for distance in distances:
+        bucket = round(distance, 1)
+        buckets[bucket] = buckets.get(bucket, 0) + 1
+
+    thickness, count = max(buckets.items(), key=lambda item: item[1])
+    if count < 2:
+        return {
+            "thickness_mm": None,
+            "warnings": ["Sheet thickness candidates were too weak to report."],
+        }
+
+    return {
+        "thickness_mm": round_number(thickness),
+        "warnings": ["Sheet thickness is estimated from repeated planar face offsets."],
+    }
+
+
+def face_distance(first: Any, second: Any) -> float | None:
+    try:
+        distance = first.distToShape(second)[0]
+    except Exception:
+        return None
+
+    if not isinstance(distance, (int, float)) or not math.isfinite(float(distance)):
+        return None
+    return float(distance)
 
 
 def coerce_to_mesh(loaded: Any) -> Any:

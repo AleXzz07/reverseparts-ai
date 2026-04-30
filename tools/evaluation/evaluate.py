@@ -1,4 +1,4 @@
-"""Evaluate extracted REVERSEPARTS JSON against a ground truth dataset."""
+"""Evaluate CAD extraction JSON against a REVERSEPARTS ground truth dataset."""
 
 from __future__ import annotations
 
@@ -391,28 +391,32 @@ def evaluate(expected_data: dict[str, Any], actual_data: dict[str, Any]) -> dict
                 }
             )
 
+    final_score = score_report(
+        correct_fields,
+        missing_fields,
+        different_fields,
+        numeric_errors,
+        feature_report,
+    )
+
     return {
+        "evaluation_type": "cad_extraction_accuracy",
         "correct_fields": correct_fields,
         "missing_fields": missing_fields,
         "different_fields": different_fields,
         "percentage_errors": numeric_errors,
         "feature_precision": feature_report,
-        "final_score": score_report(
-            correct_fields,
-            missing_fields,
-            different_fields,
-            numeric_errors,
-            feature_report,
-        ),
+        "cad_accuracy_score": final_score,
+        "final_score": final_score,
     }
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Compare extracted REVERSEPARTS JSON with ground truth."
+        description="Compare CAD extractor JSON with REVERSEPARTS ground truth."
     )
+    parser.add_argument("cad_output_json", type=Path, help="CAD extractor output JSON path.")
     parser.add_argument("expected_json", type=Path, help="Ground truth JSON path.")
-    parser.add_argument("actual_json", type=Path, help="Extractor output JSON path.")
     parser.add_argument(
         "-o",
         "--output",
@@ -423,7 +427,7 @@ def main() -> int:
     parser.add_argument("--pretty", action="store_true", help="Print indented JSON.")
     args = parser.parse_args()
 
-    report = evaluate(load_json(args.expected_json), load_json(args.actual_json))
+    report = evaluate(load_json(args.expected_json), load_json(args.cad_output_json))
     serialized = json.dumps(report, ensure_ascii=False, indent=2 if args.pretty else None)
     if args.output:
         args.output.write_text(serialized + "\n", encoding="utf-8")
