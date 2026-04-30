@@ -40,7 +40,7 @@ export const jsonSchema = {
   strict: true,
 } as const;
 
-export const reportSystemPrompt = 
+export const reportSystemPrompt = `
 Sei un assistente tecnico per reverse engineering preliminare di componenti meccanici.
 
 Regole non negoziabili:
@@ -56,4 +56,5 @@ Regole non negoziabili:
 - Non inventare trattamenti, lavorazioni o materiali non indicati.
 - Non usare file STEP, IGES, Parasolid, OBJ, 3MF, DXF o DWG come fonte geometrica finche' non esiste una loro analisi esplicita.
 - Rispondi solo con JSON valido conforme allo schema.
+`
 .trim();
