@@ -31,8 +31,12 @@ create table if not exists public.component_files (
   file_path text not null,
   file_type text not null,
   file_size bigint not null default 0,
+  extracted_pdf_data jsonb,
   created_at timestamptz not null default now()
 );
+
+alter table public.component_files
+add column if not exists extracted_pdf_data jsonb;
 
 create table if not exists public.ai_reports (
   id uuid primary key default gen_random_uuid(),

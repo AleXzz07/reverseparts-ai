@@ -4,6 +4,7 @@ import { AppShell } from "@/components/app-shell";
 import { BackLink } from "@/components/back-link";
 import { GenerateReportButton } from "@/components/generate-report-button";
 import { GeometryAnalysisSection } from "@/components/geometry-analysis-section";
+import { PdfExtractedDataSection } from "@/components/pdf-extracted-data-section";
 import { ReportSection } from "@/components/report-section";
 import { normalizeTechnicalReport } from "@/lib/ai/normalize-report";
 import { isStlFile, isTechnicalDocument } from "@/lib/files";
@@ -127,6 +128,7 @@ export default async function ComponentDetailPage({
               <p className="text-sm text-[var(--muted)]">Nessun file caricato.</p>
             )}
           </section>
+          <PdfExtractedDataSection files={fileRows} />
           <GeometryAnalysisSection analyses={geometryRows} />
         </aside>
 

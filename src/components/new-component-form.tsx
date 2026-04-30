@@ -6,6 +6,7 @@ import { UploadCloud } from "lucide-react";
 import { createClient } from "@/lib/supabase/browser";
 import {
   getStoredContentType,
+  isPdfFile,
   isStlFile,
   isSupportedUpload,
   supportedUploadExtensions,
@@ -99,6 +100,24 @@ export function NewComponentForm({
           setError(
             payload?.error ??
               `Il file STL ${file.name} e' stato caricato ma non e' analizzabile.`,
+          );
+          setLoading(false);
+          return;
+        }
+      }
+
+      if (isPdfFile(file.name, contentType)) {
+        const extractionResponse = await fetch(`/api/files/${savedFile.id}/extract-pdf`, {
+          method: "POST",
+        });
+
+        if (!extractionResponse.ok) {
+          const payload = (await extractionResponse.json().catch(() => null)) as
+            | { error?: string }
+            | null;
+          setError(
+            payload?.error ??
+              `Il PDF ${file.name} e' stato caricato ma i dati non sono estraibili.`,
           );
           setLoading(false);
           return;

@@ -57,6 +57,10 @@ export function isStlFile(fileName: string) {
   return getFileExtension(fileName) === ".stl";
 }
 
+export function isPdfFile(fileName: string, contentType?: string | null) {
+  return contentType === "application/pdf" || getFileExtension(fileName) === ".pdf";
+}
+
 export function getStoredContentType(file: File) {
   return file.type || "application/octet-stream";
 }

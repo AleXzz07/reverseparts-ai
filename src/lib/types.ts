@@ -8,7 +8,34 @@ export type ComponentFile = {
   file_path: string;
   file_type: string;
   file_size: number;
+  extracted_pdf_data: PdfExtractedData | null;
   created_at: string;
+};
+
+export type PdfExtractedFeatureGroup = {
+  count: number;
+  diameter_mm?: number | null;
+  length_mm?: number | null;
+  size_mm?: number | null;
+};
+
+export type PdfExtractedData = {
+  part_name: string;
+  material: string;
+  thickness_mm: number | null;
+  dimensions_mm: { x: number | null; y: number | null; z: number | null };
+  part_weight_kg: number | null;
+  blank_size_mm: { x: number | null; y: number | null };
+  blank_weight_kg: number | null;
+  blank_perimeter_mm: number | null;
+  features: {
+    circular_holes: PdfExtractedFeatureGroup[];
+    elongated_holes: PdfExtractedFeatureGroup[];
+    polygonal_holes: PdfExtractedFeatureGroup[];
+    flanges: PdfExtractedFeatureGroup[];
+  };
+  process_steps: string[];
+  warnings: string[];
 };
 
 export type Folder = {
