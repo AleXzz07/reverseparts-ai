@@ -137,6 +137,7 @@ export type CadFeatureGroup = {
   length_mm?: number | null;
   size_mm?: number | null;
   radius_mm?: number | null;
+  center_mm?: GeometryVector | null;
   confidence?: string | number;
   source?: string;
   axis?: GeometryVector | null;

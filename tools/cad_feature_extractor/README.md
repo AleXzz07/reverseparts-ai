@@ -77,6 +77,8 @@ The tool emits JSON with this shape:
   "estimated_weight_kg": null,
   "holes_count": null,
   "holes": [],
+  "holes_debug_candidates_count": 0,
+  "holes_detection_confidence": "unknown",
   "features": {
     "circular_holes": [],
     "elongated_holes": [],
@@ -98,6 +100,9 @@ The tool emits JSON with this shape:
 - STEP/STP is the primary source for dimensions, volume, area, holes, bends, flanges and sheet thickness.
 - STEP/STP extraction uses local FreeCAD/OpenCascade capabilities when available.
 - Sheet thickness, bends and typed holes are reported only when they are deducible from geometry.
+- `holes_count` counts deduplicated physical features, not raw edges or repeated loops.
+- Raw STEP candidates are summarized separately in `holes_debug_candidates_count`.
+- Through-hole loops on opposite sheet faces are merged when center, metric, axis and sheet thickness are compatible.
 - STL units are not stored in the file; values are interpreted as millimeters.
 - STL extraction calculates bounding box, volume when watertight, surface area and triangle count.
 - STL hole detection is topological and cannot determine parametric hole diameters.

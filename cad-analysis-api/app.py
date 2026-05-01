@@ -133,9 +133,9 @@ def analyze_with_freecad(
         bbox = shape.BoundBox
         volume_cm3 = convert_volume_mm3_to_cm3(float(shape.Volume), unit_factor)
         surface_area_cm2 = convert_area_mm2_to_cm2(float(shape.Area), unit_factor)
-        feature_result = detect_hole_features(shape, unit_factor)
-        flanges = detect_bend_candidates(shape, feature_result["circular_holes"], unit_factor)
         thickness = estimate_sheet_thickness(shape, unit_factor)
+        feature_result = detect_hole_features(shape, unit_factor, thickness["thickness_mm"])
+        flanges = detect_bend_candidates(shape, feature_result["circular_holes"], unit_factor)
         faces_count = len(shape.Faces)
         holes = (
             feature_result["circular_holes"]
@@ -257,7 +257,11 @@ def analyze_with_pythonocc(
     return output
 
 
-def detect_hole_features(shape: Any, unit_factor: float) -> dict[str, Any]:
+def detect_hole_features(
+    shape: Any,
+    unit_factor: float,
+    sheet_thickness_mm: float | None = None,
+) -> dict[str, Any]:
     circular_candidates: list[dict[str, Any]] = []
     elongated_candidates: list[dict[str, Any]] = []
     polygonal_candidates: list[dict[str, Any]] = []
@@ -279,7 +283,8 @@ def detect_hole_features(shape: Any, unit_factor: float) -> dict[str, Any]:
         if diameter_mm > 40:
             continue
         location = getattr(axis, "Location", None)
-        center = face_center(face, unit_factor)
+        center = vector_to_dict(location, unit_factor) if location is not None else face_center(face, unit_factor)
+        axis_dict = axis_direction_to_dict(axis)
         key = (
             round(diameter_mm, 1),
             round(center["x"] / 1.0, 1),
@@ -297,27 +302,41 @@ def detect_hole_features(shape: Any, unit_factor: float) -> dict[str, Any]:
                 "count": 1,
                 "diameter_mm": round_number(diameter_mm),
                 "center_mm": center,
+                "axis": axis_dict,
                 "confidence": confidence,
                 "source": "FreeCAD cylindrical face",
             }
         )
 
     for face in main_planar_faces(shape):
+        face_axis = face_axis_to_dict(face)
         for wire in inner_wires(face):
-            polygon_result = classify_polygonal_wire(wire, unit_factor)
+            polygon_result = classify_polygonal_wire(wire, unit_factor, face_axis)
             if polygon_result is not None:
                 polygonal_candidates.append(polygon_result)
                 continue
-            elongated_result = classify_elongated_wire(wire, unit_factor)
+            elongated_result = classify_elongated_wire(wire, unit_factor, face_axis)
             if elongated_result is not None:
                 elongated_candidates.append(elongated_result)
 
     debug_candidates_count = (
         len(circular_candidates) + len(elongated_candidates) + len(polygonal_candidates)
     )
-    circular_holes = filter_confident_features(circular_candidates, "diameter_mm")
-    elongated_holes = filter_confident_features(elongated_candidates, "length_mm")
-    polygonal_holes = filter_confident_features(polygonal_candidates, "size_mm")
+    circular_holes = filter_confident_features(
+        circular_candidates,
+        "diameter_mm",
+        sheet_thickness_mm,
+    )
+    elongated_holes = filter_confident_features(
+        elongated_candidates,
+        "length_mm",
+        sheet_thickness_mm,
+    )
+    polygonal_holes = filter_confident_features(
+        polygonal_candidates,
+        "size_mm",
+        sheet_thickness_mm,
+    )
 
     detection_confidence = summarize_hole_confidence(
         circular_holes + elongated_holes + polygonal_holes,
@@ -356,19 +375,21 @@ def detect_hole_features(shape: Any, unit_factor: float) -> dict[str, Any]:
 def filter_confident_features(
     candidates: list[dict[str, Any]],
     metric_key: str,
+    sheet_thickness_mm: float | None = None,
 ) -> list[dict[str, Any]]:
     confident = [
         candidate
         for candidate in candidates
         if numeric_confidence(candidate.get("confidence")) >= HOLE_CONFIDENCE_THRESHOLD
     ]
-    deduped = dedupe_feature_candidates(confident, metric_key)
+    deduped = dedupe_feature_candidates(confident, metric_key, sheet_thickness_mm)
     return group_by_metric(deduped, metric_key)
 
 
 def dedupe_feature_candidates(
     candidates: list[dict[str, Any]],
     metric_key: str,
+    sheet_thickness_mm: float | None = None,
 ) -> list[dict[str, Any]]:
     deduped: list[dict[str, Any]] = []
     for candidate in sorted(
@@ -376,7 +397,10 @@ def dedupe_feature_candidates(
         key=lambda item: numeric_confidence(item.get("confidence")),
         reverse=True,
     ):
-        if any(is_duplicate_candidate(candidate, existing, metric_key) for existing in deduped):
+        if any(
+            is_duplicate_candidate(candidate, existing, metric_key, sheet_thickness_mm)
+            for existing in deduped
+        ):
             continue
         deduped.append(candidate)
     return deduped
@@ -386,18 +410,41 @@ def is_duplicate_candidate(
     candidate: dict[str, Any],
     existing: dict[str, Any],
     metric_key: str,
+    sheet_thickness_mm: float | None = None,
 ) -> bool:
     candidate_metric = as_float(candidate.get(metric_key))
     existing_metric = as_float(existing.get(metric_key))
     if candidate_metric is None or existing_metric is None:
         return False
-    if abs(candidate_metric - existing_metric) > 0.35:
+    metric_tolerance = max(0.35, min(candidate_metric, existing_metric) * 0.03)
+    if abs(candidate_metric - existing_metric) > metric_tolerance:
         return False
     candidate_center = candidate.get("center_mm")
     existing_center = existing.get("center_mm")
     if not isinstance(candidate_center, dict) or not isinstance(existing_center, dict):
         return False
-    return distance(candidate_center, existing_center) < 1.0
+    center_distance = distance(candidate_center, existing_center)
+    if center_distance < 1.0:
+        return True
+
+    candidate_axis = normalized_axis(candidate.get("axis"))
+    existing_axis = normalized_axis(existing.get("axis"))
+    if candidate_axis is None or existing_axis is None:
+        return False
+    if abs(dot(candidate_axis, existing_axis)) < 0.97:
+        return False
+
+    delta = vector_delta(candidate_center, existing_center)
+    axis = candidate_axis
+    axial_distance = abs(dot(delta, axis))
+    radial_distance = math.sqrt(max(0.0, dot(delta, delta) - axial_distance**2))
+    radial_tolerance = max(1.25, min(candidate_metric, existing_metric) * 0.08)
+    thickness_tolerance = (
+        max(2.0, float(sheet_thickness_mm) + 0.8)
+        if isinstance(sheet_thickness_mm, (int, float)) and sheet_thickness_mm > 0
+        else 3.0
+    )
+    return radial_distance <= radial_tolerance and axial_distance <= thickness_tolerance
 
 
 def numeric_confidence(value: Any) -> float:
@@ -440,7 +487,11 @@ def inner_wires(face: Any) -> list[Any]:
     return sorted(wires, key=lambda wire: float(getattr(wire, "Length", 0.0) or 0.0))[:-1]
 
 
-def classify_elongated_wire(wire: Any, unit_factor: float) -> dict[str, Any] | None:
+def classify_elongated_wire(
+    wire: Any,
+    unit_factor: float,
+    axis: dict[str, float] | None,
+) -> dict[str, Any] | None:
     edges = getattr(wire, "Edges", []) or []
     if len(edges) < 4 or len(edges) > 12:
         return None
@@ -462,12 +513,17 @@ def classify_elongated_wire(wire: Any, unit_factor: float) -> dict[str, Any] | N
         "count": 1,
         "length_mm": round_number(length_mm / 2.0),
         "center_mm": wire_center(wire, unit_factor),
+        "axis": axis,
         "confidence": 0.82,
         "source": "FreeCAD closed wire arc/line mix",
     }
 
 
-def classify_polygonal_wire(wire: Any, unit_factor: float) -> dict[str, Any] | None:
+def classify_polygonal_wire(
+    wire: Any,
+    unit_factor: float,
+    axis: dict[str, float] | None,
+) -> dict[str, Any] | None:
     edges = getattr(wire, "Edges", []) or []
     if len(edges) < 3 or len(edges) > 12:
         return None
@@ -486,6 +542,7 @@ def classify_polygonal_wire(wire: Any, unit_factor: float) -> dict[str, Any] | N
         "count": 1,
         "size_mm": round_number(length_mm / max(1, len(edges))),
         "center_mm": wire_center(wire, unit_factor),
+        "axis": axis,
         "confidence": 0.8,
         "source": "FreeCAD closed wire with linear edges",
     }
@@ -522,12 +579,70 @@ def vector_to_dict(vector: Any, unit_factor: float) -> dict[str, float]:
     }
 
 
+def axis_direction_to_dict(axis: Any) -> dict[str, float] | None:
+    return direction_to_dict(getattr(axis, "Direction", None))
+
+
+def face_axis_to_dict(face: Any) -> dict[str, float] | None:
+    try:
+        return direction_to_dict(face.Surface.Axis.Direction)
+    except Exception:
+        return None
+
+
+def direction_to_dict(direction: Any) -> dict[str, float] | None:
+    if direction is None:
+        return None
+    vector = {
+        "x": float(getattr(direction, "x", 0.0) or 0.0),
+        "y": float(getattr(direction, "y", 0.0) or 0.0),
+        "z": float(getattr(direction, "z", 0.0) or 0.0),
+    }
+    magnitude = math.sqrt(vector["x"] ** 2 + vector["y"] ** 2 + vector["z"] ** 2)
+    if magnitude <= 0:
+        return None
+    return {
+        "x": round_number(vector["x"] / magnitude),
+        "y": round_number(vector["y"] / magnitude),
+        "z": round_number(vector["z"] / magnitude),
+    }
+
+
 def distance(first: dict[str, Any], second: dict[str, Any]) -> float:
     return math.sqrt(
         (float(first.get("x", 0.0)) - float(second.get("x", 0.0))) ** 2
         + (float(first.get("y", 0.0)) - float(second.get("y", 0.0))) ** 2
         + (float(first.get("z", 0.0)) - float(second.get("z", 0.0))) ** 2
     )
+
+
+def vector_delta(first: dict[str, Any], second: dict[str, Any]) -> tuple[float, float, float]:
+    return (
+        float(first.get("x", 0.0)) - float(second.get("x", 0.0)),
+        float(first.get("y", 0.0)) - float(second.get("y", 0.0)),
+        float(first.get("z", 0.0)) - float(second.get("z", 0.0)),
+    )
+
+
+def normalized_axis(value: Any) -> tuple[float, float, float] | None:
+    if not isinstance(value, dict):
+        return None
+    try:
+        vector = (
+            float(value.get("x", 0.0)),
+            float(value.get("y", 0.0)),
+            float(value.get("z", 0.0)),
+        )
+    except (TypeError, ValueError):
+        return None
+    magnitude = math.sqrt(dot(vector, vector))
+    if magnitude <= 0:
+        return None
+    return (vector[0] / magnitude, vector[1] / magnitude, vector[2] / magnitude)
+
+
+def dot(first: tuple[float, float, float], second: tuple[float, float, float]) -> float:
+    return first[0] * second[0] + first[1] * second[1] + first[2] * second[2]
 
 
 def as_float(value: Any) -> float | None:

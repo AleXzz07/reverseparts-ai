@@ -29,6 +29,8 @@ def empty_output(file_type: str = "") -> dict[str, Any]:
         "estimated_weight_kg": None,
         "holes_count": None,
         "holes": [],
+        "holes_debug_candidates_count": 0,
+        "holes_detection_confidence": "unknown",
         "features": {
             "circular_holes": [],
             "elongated_holes": [],
@@ -221,9 +223,9 @@ def extract_step_with_freecad(
         surface_area_cm2 = float(shape.Area) / 100.0 if shape.Area else None
         faces_count = len(shape.Faces)
         edges_count = len(shape.Edges)
-        hole_features = detect_holes_freecad(shape)
-        bend_features = detect_bends_and_flanges_freecad(shape, hole_features["circular_holes"])
         thickness_result = estimate_sheet_thickness_freecad(shape)
+        hole_features = detect_holes_freecad(shape, thickness_result["thickness_mm"])
+        bend_features = detect_bends_and_flanges_freecad(shape, hole_features["circular_holes"])
         holes = (
             hole_features["circular_holes"]
             + hole_features["elongated_holes"]
@@ -246,6 +248,8 @@ def extract_step_with_freecad(
             "estimated_weight_kg": estimate_weight(volume_cm3, material_density_g_cm3),
             "holes_count": holes_count,
             "holes": holes,
+            "holes_debug_candidates_count": hole_features["debug_candidates_count"],
+            "holes_detection_confidence": hole_features["detection_confidence"],
             "features": {
                 "circular_holes": hole_features["circular_holes"],
                 "elongated_holes": hole_features["elongated_holes"],
@@ -363,8 +367,11 @@ def extract_step_with_pythonocc(
     return output
 
 
-def detect_holes_freecad(shape: Any) -> dict[str, Any]:
-    circular_holes: list[dict[str, Any]] = []
+def detect_holes_freecad(
+    shape: Any,
+    sheet_thickness_mm: float | None = None,
+) -> dict[str, Any]:
+    circular_candidates: list[dict[str, Any]] = []
     seen: set[tuple[float, float, float, float]] = set()
 
     for face in getattr(shape, "Faces", []):
@@ -377,50 +384,138 @@ def detect_holes_freecad(shape: Any) -> dict[str, Any]:
             continue
         location = getattr(axis, "Location", None)
         direction = getattr(axis, "Direction", None)
+        center = vector_to_dict(location)
+        axis_dict = direction_to_dict(direction)
         key = (
             round(float(radius), 4),
-            round(float(getattr(location, "x", 0.0)), 3),
-            round(float(getattr(location, "y", 0.0)), 3),
-            round(float(getattr(location, "z", 0.0)), 3),
+            round(center["x"], 3),
+            round(center["y"], 3),
+            round(center["z"], 3),
         )
         if key in seen:
             continue
         seen.add(key)
-        circular_holes.append(
+        diameter_mm = float(radius) * 2.0
+        circular_candidates.append(
             {
                 "type": "circular_hole_candidate",
                 "count": 1,
-                "diameter_mm": round_number(float(radius) * 2.0),
-                "axis": {
-                    "x": round_number(float(getattr(direction, "x", 0.0))),
-                    "y": round_number(float(getattr(direction, "y", 0.0))),
-                    "z": round_number(float(getattr(direction, "z", 0.0))),
-                },
-                "confidence": "low",
+                "diameter_mm": round_number(diameter_mm),
+                "center_mm": center,
+                "axis": axis_dict,
+                "confidence": score_cylindrical_hole_confidence(diameter_mm),
                 "source": "FreeCAD cylindrical face",
             }
         )
 
-    grouped_circular_holes = group_feature_candidates(circular_holes, "diameter_mm")
+    debug_candidates_count = len(circular_candidates)
+    circular_holes = filter_confident_features(
+        circular_candidates,
+        "diameter_mm",
+        sheet_thickness_mm,
+    )
+    detection_confidence = summarize_hole_confidence(circular_holes, debug_candidates_count)
 
     warnings: list[str] = []
-    if grouped_circular_holes:
+    filtered_out = debug_candidates_count - feature_count(circular_holes)
+    if filtered_out > 0:
         warnings.append(
-            "Circular holes are detected from cylindrical STEP faces and should be validated against ground truth."
+            f"{filtered_out} low-confidence STEP hole candidates were kept out of main output."
+        )
+    if circular_holes:
+        warnings.append(
+            "Circular holes are deduplicated from cylindrical STEP faces and should be validated against ground truth."
         )
     else:
-        warnings.append("No circular holes were detected from STEP cylindrical faces.")
+        warnings.append("No high-confidence circular holes were detected from STEP cylindrical faces.")
 
     warnings.append(
         "Elongated and polygonal hole detection needs explicit B-Rep contour recognition; left empty when not deducible."
     )
 
     return {
-        "circular_holes": grouped_circular_holes,
+        "circular_holes": circular_holes,
         "elongated_holes": [],
         "polygonal_holes": [],
+        "debug_candidates_count": debug_candidates_count,
+        "detection_confidence": detection_confidence,
         "warnings": warnings,
     }
+
+
+def filter_confident_features(
+    candidates: list[dict[str, Any]],
+    metric_key: str,
+    sheet_thickness_mm: float | None = None,
+) -> list[dict[str, Any]]:
+    confident = [
+        candidate
+        for candidate in candidates
+        if numeric_confidence(candidate.get("confidence")) >= 0.75
+    ]
+    deduped = dedupe_feature_candidates(confident, metric_key, sheet_thickness_mm)
+    return group_feature_candidates(deduped, metric_key)
+
+
+def dedupe_feature_candidates(
+    candidates: list[dict[str, Any]],
+    metric_key: str,
+    sheet_thickness_mm: float | None = None,
+) -> list[dict[str, Any]]:
+    deduped: list[dict[str, Any]] = []
+    for candidate in sorted(
+        candidates,
+        key=lambda item: numeric_confidence(item.get("confidence")),
+        reverse=True,
+    ):
+        if any(
+            is_duplicate_candidate(candidate, existing, metric_key, sheet_thickness_mm)
+            for existing in deduped
+        ):
+            continue
+        deduped.append(candidate)
+    return deduped
+
+
+def is_duplicate_candidate(
+    candidate: dict[str, Any],
+    existing: dict[str, Any],
+    metric_key: str,
+    sheet_thickness_mm: float | None = None,
+) -> bool:
+    candidate_metric = as_float(candidate.get(metric_key))
+    existing_metric = as_float(existing.get(metric_key))
+    if candidate_metric is None or existing_metric is None:
+        return False
+    metric_tolerance = max(0.35, min(candidate_metric, existing_metric) * 0.03)
+    if abs(candidate_metric - existing_metric) > metric_tolerance:
+        return False
+
+    candidate_center = candidate.get("center_mm")
+    existing_center = existing.get("center_mm")
+    if not isinstance(candidate_center, dict) or not isinstance(existing_center, dict):
+        return False
+
+    if distance(candidate_center, existing_center) < 1.0:
+        return True
+
+    candidate_axis = normalized_axis(candidate.get("axis"))
+    existing_axis = normalized_axis(existing.get("axis"))
+    if candidate_axis is None or existing_axis is None:
+        return False
+    if abs(dot(candidate_axis, existing_axis)) < 0.97:
+        return False
+
+    delta = vector_delta(candidate_center, existing_center)
+    axial_distance = abs(dot(delta, candidate_axis))
+    radial_distance = math.sqrt(max(0.0, dot(delta, delta) - axial_distance**2))
+    radial_tolerance = max(1.25, min(candidate_metric, existing_metric) * 0.08)
+    thickness_tolerance = (
+        max(2.0, float(sheet_thickness_mm) + 0.8)
+        if isinstance(sheet_thickness_mm, (int, float)) and sheet_thickness_mm > 0
+        else 3.0
+    )
+    return radial_distance <= radial_tolerance and axial_distance <= thickness_tolerance
 
 
 def group_feature_candidates(
@@ -435,12 +530,113 @@ def group_feature_candidates(
         if key not in grouped:
             grouped[key] = {**feature, "count": 0}
         grouped[key]["count"] += int(feature.get("count") or 1)
+        grouped[key]["confidence"] = max(
+            numeric_confidence(grouped[key].get("confidence")),
+            numeric_confidence(feature.get("confidence")),
+        )
 
     return list(grouped.values())
 
 
 def feature_count(features: list[dict[str, Any]]) -> int:
     return sum(int(feature.get("count") or 0) for feature in features)
+
+
+def score_cylindrical_hole_confidence(diameter_mm: float) -> float:
+    confidence = 0.65
+    if 4.0 <= diameter_mm <= 18.0:
+        confidence += 0.2
+    if 18.0 < diameter_mm <= 40.0:
+        confidence += 0.05
+    if diameter_mm > 40.0:
+        confidence -= 0.35
+    return max(0.0, min(0.98, round(confidence, 2)))
+
+
+def summarize_hole_confidence(features: list[dict[str, Any]], debug_candidates_count: int) -> str:
+    if not features:
+        return "low" if debug_candidates_count else "unknown"
+    average = sum(numeric_confidence(feature.get("confidence")) for feature in features) / len(features)
+    if average >= 0.9:
+        return "high"
+    if average >= 0.75:
+        return "medium"
+    return "low"
+
+
+def vector_to_dict(vector: Any) -> dict[str, float]:
+    return {
+        "x": round_number(float(getattr(vector, "x", 0.0) or 0.0)),
+        "y": round_number(float(getattr(vector, "y", 0.0) or 0.0)),
+        "z": round_number(float(getattr(vector, "z", 0.0) or 0.0)),
+    }
+
+
+def direction_to_dict(direction: Any) -> dict[str, float] | None:
+    if direction is None:
+        return None
+    vector = {
+        "x": float(getattr(direction, "x", 0.0) or 0.0),
+        "y": float(getattr(direction, "y", 0.0) or 0.0),
+        "z": float(getattr(direction, "z", 0.0) or 0.0),
+    }
+    magnitude = math.sqrt(vector["x"] ** 2 + vector["y"] ** 2 + vector["z"] ** 2)
+    if magnitude <= 0:
+        return None
+    return {
+        "x": round_number(vector["x"] / magnitude),
+        "y": round_number(vector["y"] / magnitude),
+        "z": round_number(vector["z"] / magnitude),
+    }
+
+
+def distance(first: dict[str, Any], second: dict[str, Any]) -> float:
+    return math.sqrt(
+        (float(first.get("x", 0.0)) - float(second.get("x", 0.0))) ** 2
+        + (float(first.get("y", 0.0)) - float(second.get("y", 0.0))) ** 2
+        + (float(first.get("z", 0.0)) - float(second.get("z", 0.0))) ** 2
+    )
+
+
+def vector_delta(first: dict[str, Any], second: dict[str, Any]) -> tuple[float, float, float]:
+    return (
+        float(first.get("x", 0.0)) - float(second.get("x", 0.0)),
+        float(first.get("y", 0.0)) - float(second.get("y", 0.0)),
+        float(first.get("z", 0.0)) - float(second.get("z", 0.0)),
+    )
+
+
+def normalized_axis(value: Any) -> tuple[float, float, float] | None:
+    if not isinstance(value, dict):
+        return None
+    try:
+        vector = (
+            float(value.get("x", 0.0)),
+            float(value.get("y", 0.0)),
+            float(value.get("z", 0.0)),
+        )
+    except (TypeError, ValueError):
+        return None
+    magnitude = math.sqrt(dot(vector, vector))
+    if magnitude <= 0:
+        return None
+    return (vector[0] / magnitude, vector[1] / magnitude, vector[2] / magnitude)
+
+
+def dot(first: tuple[float, float, float], second: tuple[float, float, float]) -> float:
+    return first[0] * second[0] + first[1] * second[1] + first[2] * second[2]
+
+
+def numeric_confidence(value: Any) -> float:
+    if isinstance(value, (int, float)):
+        return float(value)
+    return 0.0
+
+
+def as_float(value: Any) -> float | None:
+    if isinstance(value, (int, float)) and math.isfinite(float(value)):
+        return float(value)
+    return None
 
 
 def detect_bends_and_flanges_freecad(

@@ -96,6 +96,8 @@ Se Render mostra ancora `FreeCAD/OpenCascade non disponibile`, controlla i log d
 - Feature non deducibili restano `null`, `[]` o nei `warnings`.
 - STP/STEP e' la fonte tecnica primaria; PDF/expected output restano ground truth di confronto.
 - I fori mostrati nel JSON principale hanno `confidence >= 0.75`.
+- `holes_count` conta feature fisiche deduplicate, non edge o loop ripetuti.
+- Loop sulle due facce opposte della lamiera vengono uniti quando centro, quota, asse e spessore sono compatibili.
 - I candidati scartati restano sintetizzati in `holes_debug_candidates_count` e nei `warnings`.
 - Se la confidenza fori non e' alta, il backend avvisa: `Rilevamento fori da STEP da verificare su CAD/metrologia.`
 
