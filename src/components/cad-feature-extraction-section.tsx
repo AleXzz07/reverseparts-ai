@@ -70,6 +70,8 @@ function CadExtractionCard({
         <Field label="Peso stimato" value={formatNumber(data.estimated_weight_kg, "kg")} />
         <Field label="Spessore lamiera" value={formatNumber(data.thickness_mm, "mm")} />
         <Field label="Fori totali" value={formatMaybeNumber(data.holes_count)} />
+        <Field label="Confidenza fori" value={data.holes_detection_confidence ?? "n/d"} />
+        <Field label="Candidati debug" value={formatMaybeNumber(data.holes_debug_candidates_count ?? null)} />
         <Field label="Fori circolari" value={formatGroups(data.features?.circular_holes ?? [], "diameter_mm")} />
         <Field label="Fori asolati" value={formatGroups(data.features?.elongated_holes ?? [], "length_mm")} />
         <Field label="Fori poligonali" value={formatGroups(data.features?.polygonal_holes ?? [], "size_mm")} />
@@ -137,6 +139,7 @@ function formatGroups(
   }
 
   return groups
+    .slice(0, 3)
     .map((group) => {
       const count = group.count ?? 1;
       const value = group[metric];

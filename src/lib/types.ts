@@ -114,6 +114,8 @@ export type CadFeatureData = {
   estimated_weight_kg: number | null;
   holes_count: number | null;
   holes: CadFeatureGroup[];
+  holes_debug_candidates_count?: number;
+  holes_detection_confidence?: "low" | "medium" | "high" | "unknown";
   features?: {
     circular_holes: CadFeatureGroup[];
     elongated_holes: CadFeatureGroup[];
@@ -135,7 +137,7 @@ export type CadFeatureGroup = {
   length_mm?: number | null;
   size_mm?: number | null;
   radius_mm?: number | null;
-  confidence?: string;
+  confidence?: string | number;
   source?: string;
   axis?: GeometryVector | null;
 };

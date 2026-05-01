@@ -16,6 +16,8 @@ app = FastAPI(title="REVERSEPARTS CAD Analysis API", version="0.1.0")
 
 STEP_EXTENSIONS = {".stp", ".step"}
 SUPPORTED_UNITS = {"mm": 1.0, "cm": 10.0, "m": 1000.0, "inch": 25.4}
+HOLE_CONFIDENCE_THRESHOLD = 0.75
+MIN_HOLE_DIAMETER_MM = 4.0
 FREECAD_IMPORT_PATHS = [
     os.environ.get("FREECAD_PYTHON_PATH"),
     "/usr/lib/freecad/lib",
@@ -34,6 +36,8 @@ def empty_output() -> dict[str, Any]:
         "estimated_weight_kg": None,
         "holes_count": None,
         "holes": [],
+        "holes_debug_candidates_count": 0,
+        "holes_detection_confidence": "unknown",
         "features": {
             "circular_holes": [],
             "elongated_holes": [],
@@ -154,6 +158,8 @@ def analyze_with_freecad(
             "estimated_weight_kg": estimate_weight(volume_cm3, density_g_cm3),
             "holes_count": feature_count(holes),
             "holes": holes,
+            "holes_debug_candidates_count": feature_result["debug_candidates_count"],
+            "holes_detection_confidence": feature_result["detection_confidence"],
             "features": {
                 "circular_holes": feature_result["circular_holes"],
                 "elongated_holes": feature_result["elongated_holes"],
@@ -252,9 +258,9 @@ def analyze_with_pythonocc(
 
 
 def detect_hole_features(shape: Any, unit_factor: float) -> dict[str, Any]:
-    circular_holes: list[dict[str, Any]] = []
-    elongated_holes: list[dict[str, Any]] = []
-    polygonal_holes: list[dict[str, Any]] = []
+    circular_candidates: list[dict[str, Any]] = []
+    elongated_candidates: list[dict[str, Any]] = []
+    polygonal_candidates: list[dict[str, Any]] = []
     warnings: list[str] = []
     seen: set[tuple[float, float, float, float]] = set()
 
@@ -267,68 +273,176 @@ def detect_hole_features(shape: Any, unit_factor: float) -> dict[str, Any]:
         radius_mm = float(radius) * unit_factor
         if not math.isfinite(radius_mm) or radius_mm <= 0:
             continue
+        diameter_mm = radius_mm * 2.0
+        if diameter_mm < MIN_HOLE_DIAMETER_MM:
+            continue
+        if diameter_mm > 40:
+            continue
         location = getattr(axis, "Location", None)
+        center = face_center(face, unit_factor)
         key = (
-            round(radius_mm, 4),
-            round(float(getattr(location, "x", 0.0)) * unit_factor, 3),
-            round(float(getattr(location, "y", 0.0)) * unit_factor, 3),
-            round(float(getattr(location, "z", 0.0)) * unit_factor, 3),
+            round(diameter_mm, 1),
+            round(center["x"] / 1.0, 1),
+            round(center["y"] / 1.0, 1),
+            round(center["z"] / 1.0, 1),
         )
         if key in seen:
             continue
         seen.add(key)
-        circular_holes.append(
+        face_area = float(getattr(face, "Area", 0.0) or 0.0) * (unit_factor**2)
+        confidence = score_cylindrical_hole_confidence(diameter_mm, face_area)
+        circular_candidates.append(
             {
                 "type": "circular_hole_candidate",
                 "count": 1,
-                "diameter_mm": round_number(radius_mm * 2.0),
-                "confidence": "low",
+                "diameter_mm": round_number(diameter_mm),
+                "center_mm": center,
+                "confidence": confidence,
                 "source": "FreeCAD cylindrical face",
             }
         )
 
-    for wire in iter_shape_wires(shape):
-        polygon_result = classify_polygonal_wire(wire, unit_factor)
-        if polygon_result is not None:
-            polygonal_holes.append(polygon_result)
-            continue
-        elongated_result = classify_elongated_wire(wire, unit_factor)
-        if elongated_result is not None:
-            elongated_holes.append(elongated_result)
+    for face in main_planar_faces(shape):
+        for wire in inner_wires(face):
+            polygon_result = classify_polygonal_wire(wire, unit_factor)
+            if polygon_result is not None:
+                polygonal_candidates.append(polygon_result)
+                continue
+            elongated_result = classify_elongated_wire(wire, unit_factor)
+            if elongated_result is not None:
+                elongated_candidates.append(elongated_result)
 
-    circular_holes = group_by_metric(circular_holes, "diameter_mm")
-    elongated_holes = group_by_metric(elongated_holes, "length_mm")
-    polygonal_holes = group_by_metric(polygonal_holes, "size_mm")
+    debug_candidates_count = (
+        len(circular_candidates) + len(elongated_candidates) + len(polygonal_candidates)
+    )
+    circular_holes = filter_confident_features(circular_candidates, "diameter_mm")
+    elongated_holes = filter_confident_features(elongated_candidates, "length_mm")
+    polygonal_holes = filter_confident_features(polygonal_candidates, "size_mm")
+
+    detection_confidence = summarize_hole_confidence(
+        circular_holes + elongated_holes + polygonal_holes,
+        debug_candidates_count,
+    )
+
+    filtered_out = debug_candidates_count - (
+        feature_count(circular_holes)
+        + feature_count(elongated_holes)
+        + feature_count(polygonal_holes)
+    )
+    if filtered_out > 0:
+        warnings.append(
+            f"{filtered_out} low-confidence STEP hole candidates were kept out of main output."
+        )
+    if detection_confidence != "high":
+        warnings.append("Rilevamento fori da STEP da verificare su CAD/metrologia.")
 
     if not circular_holes:
-        warnings.append("No circular holes were deducible from STEP cylindrical faces.")
+        warnings.append("No high-confidence circular holes were deducible from STEP geometry.")
     if not elongated_holes:
-        warnings.append("No elongated holes were deducible from closed wire geometry.")
+        warnings.append("No high-confidence elongated holes were deducible from STEP geometry.")
     if not polygonal_holes:
-        warnings.append("No polygonal holes were deducible from closed wire geometry.")
-    if elongated_holes or polygonal_holes:
-        warnings.append(
-            "Elongated/polygonal holes are low-confidence closed-wire candidates; validate against ground truth."
-        )
+        warnings.append("No high-confidence polygonal holes were deducible from STEP geometry.")
 
     return {
         "circular_holes": circular_holes,
         "elongated_holes": elongated_holes,
         "polygonal_holes": polygonal_holes,
+        "debug_candidates_count": debug_candidates_count,
+        "detection_confidence": detection_confidence,
         "warnings": warnings,
     }
 
 
-def iter_shape_wires(shape: Any) -> list[Any]:
-    wires = []
+def filter_confident_features(
+    candidates: list[dict[str, Any]],
+    metric_key: str,
+) -> list[dict[str, Any]]:
+    confident = [
+        candidate
+        for candidate in candidates
+        if numeric_confidence(candidate.get("confidence")) >= HOLE_CONFIDENCE_THRESHOLD
+    ]
+    deduped = dedupe_feature_candidates(confident, metric_key)
+    return group_by_metric(deduped, metric_key)
+
+
+def dedupe_feature_candidates(
+    candidates: list[dict[str, Any]],
+    metric_key: str,
+) -> list[dict[str, Any]]:
+    deduped: list[dict[str, Any]] = []
+    for candidate in sorted(
+        candidates,
+        key=lambda item: numeric_confidence(item.get("confidence")),
+        reverse=True,
+    ):
+        if any(is_duplicate_candidate(candidate, existing, metric_key) for existing in deduped):
+            continue
+        deduped.append(candidate)
+    return deduped
+
+
+def is_duplicate_candidate(
+    candidate: dict[str, Any],
+    existing: dict[str, Any],
+    metric_key: str,
+) -> bool:
+    candidate_metric = as_float(candidate.get(metric_key))
+    existing_metric = as_float(existing.get(metric_key))
+    if candidate_metric is None or existing_metric is None:
+        return False
+    if abs(candidate_metric - existing_metric) > 0.35:
+        return False
+    candidate_center = candidate.get("center_mm")
+    existing_center = existing.get("center_mm")
+    if not isinstance(candidate_center, dict) or not isinstance(existing_center, dict):
+        return False
+    return distance(candidate_center, existing_center) < 1.0
+
+
+def numeric_confidence(value: Any) -> float:
+    if isinstance(value, (int, float)):
+        return float(value)
+    return 0.0
+
+
+def summarize_hole_confidence(features: list[dict[str, Any]], debug_candidates_count: int) -> str:
+    if not features:
+        return "low" if debug_candidates_count else "unknown"
+    average = sum(numeric_confidence(feature.get("confidence")) for feature in features) / len(features)
+    if average >= 0.9:
+        return "high"
+    if average >= HOLE_CONFIDENCE_THRESHOLD:
+        return "medium"
+    return "low"
+
+
+def main_planar_faces(shape: Any) -> list[Any]:
+    planar_faces = []
     for face in getattr(shape, "Faces", []):
-        wires.extend(getattr(face, "Wires", []) or [])
-    return wires
+        surface = getattr(face, "Surface", None)
+        if surface and surface.__class__.__name__.lower().endswith("plane"):
+            planar_faces.append(face)
+    if not planar_faces:
+        return []
+    max_area = max(float(getattr(face, "Area", 0.0) or 0.0) for face in planar_faces)
+    return [
+        face
+        for face in planar_faces
+        if float(getattr(face, "Area", 0.0) or 0.0) >= max_area * 0.08
+    ]
+
+
+def inner_wires(face: Any) -> list[Any]:
+    wires = list(getattr(face, "Wires", []) or [])
+    if len(wires) <= 1:
+        return []
+    return sorted(wires, key=lambda wire: float(getattr(wire, "Length", 0.0) or 0.0))[:-1]
 
 
 def classify_elongated_wire(wire: Any, unit_factor: float) -> dict[str, Any] | None:
     edges = getattr(wire, "Edges", []) or []
-    if len(edges) < 4:
+    if len(edges) < 4 or len(edges) > 12:
         return None
     circle_edges = 0
     line_edges = 0
@@ -341,20 +455,21 @@ def classify_elongated_wire(wire: Any, unit_factor: float) -> dict[str, Any] | N
     if circle_edges < 2 or line_edges < 2:
         return None
     length_mm = float(getattr(wire, "Length", 0.0) or 0.0) * unit_factor
-    if length_mm <= 0:
+    if length_mm < 20 or length_mm > 200:
         return None
     return {
         "type": "elongated_hole_candidate",
         "count": 1,
         "length_mm": round_number(length_mm / 2.0),
-        "confidence": "low",
+        "center_mm": wire_center(wire, unit_factor),
+        "confidence": 0.82,
         "source": "FreeCAD closed wire arc/line mix",
     }
 
 
 def classify_polygonal_wire(wire: Any, unit_factor: float) -> dict[str, Any] | None:
     edges = getattr(wire, "Edges", []) or []
-    if len(edges) < 3:
+    if len(edges) < 3 or len(edges) > 12:
         return None
     line_edges = 0
     for edge in edges:
@@ -364,15 +479,61 @@ def classify_polygonal_wire(wire: Any, unit_factor: float) -> dict[str, Any] | N
     if line_edges != len(edges):
         return None
     length_mm = float(getattr(wire, "Length", 0.0) or 0.0) * unit_factor
-    if length_mm <= 0:
+    if length_mm < 12 or length_mm > 180:
         return None
     return {
         "type": "polygonal_hole_candidate",
         "count": 1,
         "size_mm": round_number(length_mm / max(1, len(edges))),
-        "confidence": "low",
+        "center_mm": wire_center(wire, unit_factor),
+        "confidence": 0.8,
         "source": "FreeCAD closed wire with linear edges",
     }
+
+
+def score_cylindrical_hole_confidence(diameter_mm: float, face_area_mm2: float) -> float:
+    confidence = 0.65
+    if 4.0 <= diameter_mm <= 18.0:
+        confidence += 0.2
+    if face_area_mm2 <= max(120.0, diameter_mm * 18.0):
+        confidence += 0.1
+    if face_area_mm2 > max(300.0, diameter_mm * 50.0):
+        confidence -= 0.25
+    return max(0.0, min(0.98, round(confidence, 2)))
+
+
+def face_center(face: Any, unit_factor: float) -> dict[str, float]:
+    center = getattr(face, "CenterOfMass", None)
+    if center is None:
+        center = getattr(getattr(face, "BoundBox", None), "Center", None)
+    return vector_to_dict(center, unit_factor)
+
+
+def wire_center(wire: Any, unit_factor: float) -> dict[str, float]:
+    center = getattr(getattr(wire, "BoundBox", None), "Center", None)
+    return vector_to_dict(center, unit_factor)
+
+
+def vector_to_dict(vector: Any, unit_factor: float) -> dict[str, float]:
+    return {
+        "x": round_number(float(getattr(vector, "x", 0.0) or 0.0) * unit_factor),
+        "y": round_number(float(getattr(vector, "y", 0.0) or 0.0) * unit_factor),
+        "z": round_number(float(getattr(vector, "z", 0.0) or 0.0) * unit_factor),
+    }
+
+
+def distance(first: dict[str, Any], second: dict[str, Any]) -> float:
+    return math.sqrt(
+        (float(first.get("x", 0.0)) - float(second.get("x", 0.0))) ** 2
+        + (float(first.get("y", 0.0)) - float(second.get("y", 0.0))) ** 2
+        + (float(first.get("z", 0.0)) - float(second.get("z", 0.0))) ** 2
+    )
+
+
+def as_float(value: Any) -> float | None:
+    if isinstance(value, (int, float)) and math.isfinite(float(value)):
+        return float(value)
+    return None
 
 
 def detect_bend_candidates(
@@ -492,7 +653,14 @@ def group_by_metric(features: list[dict[str, Any]], metric_key: str) -> list[dic
         if key not in grouped:
             grouped[key] = {**feature, "count": 0}
         grouped[key]["count"] += int(feature.get("count") or 1)
-    return list(grouped.values())
+        grouped[key]["confidence"] = max(
+            numeric_confidence(grouped[key].get("confidence")),
+            numeric_confidence(feature.get("confidence")),
+        )
+    return sorted(
+        grouped.values(),
+        key=lambda item: (str(item.get("type", "")), float(item.get(metric_key) or 0.0)),
+    )
 
 
 def feature_count(features: list[dict[str, Any]]) -> int:

@@ -7,37 +7,53 @@
   "volume_cm3": 18.5185,
   "surface_area_cm2": 220.643,
   "estimated_weight_kg": 0.05,
-  "holes_count": 4,
+  "holes_count": 8,
   "holes": [
     {
       "type": "circular_hole_candidate",
       "count": 2,
       "diameter_mm": 6.99,
-      "confidence": "low",
+      "confidence": 0.85,
       "source": "FreeCAD cylindrical face"
     },
     {
       "type": "circular_hole_candidate",
       "count": 2,
       "diameter_mm": 4.99,
-      "confidence": "low",
+      "confidence": 0.85,
       "source": "FreeCAD cylindrical face"
+    },
+    {
+      "type": "elongated_hole_candidate",
+      "count": 2,
+      "length_mm": 51.37,
+      "confidence": 0.82,
+      "source": "FreeCAD closed wire arc/line mix"
+    },
+    {
+      "type": "polygonal_hole_candidate",
+      "count": 2,
+      "size_mm": 27.71,
+      "confidence": 0.8,
+      "source": "FreeCAD closed wire with linear edges"
     }
   ],
+  "holes_debug_candidates_count": 54,
+  "holes_detection_confidence": "medium",
   "features": {
     "circular_holes": [
       {
         "type": "circular_hole_candidate",
         "count": 2,
         "diameter_mm": 6.99,
-        "confidence": "low",
+        "confidence": 0.85,
         "source": "FreeCAD cylindrical face"
       },
       {
         "type": "circular_hole_candidate",
         "count": 2,
         "diameter_mm": 4.99,
-        "confidence": "low",
+        "confidence": 0.85,
         "source": "FreeCAD cylindrical face"
       }
     ],
@@ -46,7 +62,7 @@
         "type": "elongated_hole_candidate",
         "count": 2,
         "length_mm": 51.37,
-        "confidence": "low",
+        "confidence": 0.82,
         "source": "FreeCAD closed wire arc/line mix"
       }
     ],
@@ -55,7 +71,7 @@
         "type": "polygonal_hole_candidate",
         "count": 2,
         "size_mm": 27.71,
-        "confidence": "low",
+        "confidence": 0.8,
         "source": "FreeCAD closed wire with linear edges"
       }
     ],
@@ -65,7 +81,7 @@
         "count": 2,
         "radius_mm": null,
         "length_mm": null,
-        "confidence": "low",
+        "confidence": 0.75,
         "source": "FreeCAD cylindrical non-hole face"
       }
     ]
@@ -77,14 +93,16 @@
       "count": 2,
       "radius_mm": null,
       "length_mm": null,
-      "confidence": "low",
+      "confidence": 0.75,
       "source": "FreeCAD cylindrical non-hole face"
     }
   ],
   "thickness_mm": 2.0,
   "complexity_score": "medium",
   "warnings": [
-    "Sheet thickness is estimated from repeated planar face offsets.",
+    "46 low-confidence STEP hole candidates were kept out of main output.",
+    "Rilevamento fori da STEP da verificare su CAD/metrologia.",
+    "Sheet thickness is estimated from dominant nearby parallel planar faces.",
     "Non inventare dati: feature non deducibili sono restituite come null o array vuoti."
   ]
 }
