@@ -49,6 +49,11 @@ function CadExtractionCard({
     return null;
   }
 
+  const canUseStepHoleDetection = data.holes_detection_confidence === "high";
+  const holeStatus = canUseStepHoleDetection
+    ? formatMaybeNumber(data.holes_count)
+    : "rilevamento non affidabile";
+
   return (
     <article className="rounded-lg border border-[var(--line)] bg-[#faf9f5] p-4">
       <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -69,14 +74,24 @@ function CadExtractionCard({
         <Field label="Area" value={formatNumber(data.surface_area_cm2, "cm2")} />
         <Field label="Peso stimato" value={formatNumber(data.estimated_weight_kg, "kg")} />
         <Field label="Spessore lamiera" value={formatNumber(data.thickness_mm, "mm")} />
-        <Field label="Fori totali" value={formatMaybeNumber(data.holes_count)} />
+        <Field label="Fori" value={holeStatus} />
         <Field label="Confidenza fori" value={data.holes_detection_confidence ?? "n/d"} />
         <Field label="Candidati debug" value={formatMaybeNumber(data.holes_debug_candidates_count ?? null)} />
-        <Field label="Fori circolari" value={formatGroups(data.features?.circular_holes ?? [], "diameter_mm")} />
-        <Field label="Fori asolati" value={formatGroups(data.features?.elongated_holes ?? [], "length_mm")} />
-        <Field label="Fori poligonali" value={formatGroups(data.features?.polygonal_holes ?? [], "size_mm")} />
+        {canUseStepHoleDetection ? (
+          <>
+            <Field label="Fori circolari" value={formatGroups(data.features?.circular_holes ?? [], "diameter_mm")} />
+            <Field label="Fori asolati" value={formatGroups(data.features?.elongated_holes ?? [], "length_mm")} />
+            <Field label="Fori poligonali" value={formatGroups(data.features?.polygonal_holes ?? [], "size_mm")} />
+          </>
+        ) : null}
         <Field label="Flange/pieghe" value={formatGroups(data.features?.flanges ?? data.flanges, "length_mm")} />
       </dl>
+
+      {!canUseStepHoleDetection ? (
+        <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800">
+          Rilevamento fori STEP in sviluppo: usare PDF/CAD tecnico per conferma.
+        </div>
+      ) : null}
 
       {data.warnings.length ? (
         <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800">

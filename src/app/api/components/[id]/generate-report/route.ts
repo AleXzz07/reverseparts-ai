@@ -230,6 +230,20 @@ function formatCadFeaturesForPrompt(extractions: CadFeatureExtraction[]) {
         return `CAD ${index + 1}: nessun dato estratto.`;
       }
 
+      const canUseStepHoleDetection = data.holes_detection_confidence === "high";
+      const holeLines = canUseStepHoleDetection
+        ? [
+            `- fori totali: ${data.holes_count ?? "n/d"}`,
+            `- fori circolari: ${formatCadGroups(data.features?.circular_holes ?? [], "diameter_mm")}`,
+            `- fori asolati: ${formatCadGroups(data.features?.elongated_holes ?? [], "length_mm")}`,
+            `- fori poligonali: ${formatCadGroups(data.features?.polygonal_holes ?? [], "size_mm")}`,
+          ]
+        : [
+            "- fori STEP: rilevamento non affidabile, non usare per il preventivo",
+            `- candidati foro debug: ${data.holes_debug_candidates_count ?? "n/d"}`,
+            "- nota fori: Rilevamento fori STEP in sviluppo: usare PDF/CAD tecnico per conferma.",
+          ];
+
       return [
         `CAD ${index + 1} (${data.file_type}):`,
         `- dimensioni X/Y/Z: ${formatNullableVector(data.dimensions_mm)}`,
@@ -237,10 +251,8 @@ function formatCadFeaturesForPrompt(extractions: CadFeatureExtraction[]) {
         `- area: ${formatNumber(data.surface_area_cm2)} cm2`,
         `- spessore lamiera: ${formatNumber(data.thickness_mm)} mm`,
         `- peso stimato: ${formatNumber(data.estimated_weight_kg)} kg`,
-        `- fori totali: ${data.holes_count ?? "n/d"}`,
-        `- fori circolari: ${formatCadGroups(data.features?.circular_holes ?? [], "diameter_mm")}`,
-        `- fori asolati: ${formatCadGroups(data.features?.elongated_holes ?? [], "length_mm")}`,
-        `- fori poligonali: ${formatCadGroups(data.features?.polygonal_holes ?? [], "size_mm")}`,
+        `- confidenza fori STEP: ${data.holes_detection_confidence ?? "unknown"}`,
+        ...holeLines,
         `- flange/pieghe: ${formatCadGroups(data.features?.flanges ?? data.flanges, "length_mm")}`,
         `- complessita': ${data.complexity_score}`,
         `- warning: ${data.warnings.length ? data.warnings.join(" ") : "nessuno"}`,
