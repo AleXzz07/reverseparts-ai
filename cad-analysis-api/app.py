@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import os
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -33,6 +34,12 @@ def empty_output() -> dict[str, Any]:
         "estimated_weight_kg": None,
         "holes_count": None,
         "holes": [],
+        "features": {
+            "circular_holes": [],
+            "elongated_holes": [],
+            "polygonal_holes": [],
+            "flanges": [],
+        },
         "bends_count": None,
         "flanges": [],
         "thickness_mm": None,
@@ -58,6 +65,7 @@ async def analyze_cad(
     materiale: str | None = Form(default=None),
     density_g_cm3: float | None = Form(default=None),
     unit: str = Form(default="mm"),
+    notes: str | None = Form(default=None),
 ) -> JSONResponse:
     extension = Path(file.filename or "").suffix.lower()
     if extension not in STEP_EXTENSIONS:
@@ -71,9 +79,10 @@ async def analyze_cad(
         input_path = Path(tmp_dir) / safe_name(file.filename or f"part{extension}")
         input_path.write_bytes(await file.read())
 
-        result = analyze_with_freecad(input_path, density_g_cm3, unit_factor)
+        density = resolve_density(density_g_cm3, materiale, notes)
+        result = analyze_with_freecad(input_path, density, unit_factor)
         if result is None:
-            result = analyze_with_pythonocc(input_path, density_g_cm3, unit_factor)
+            result = analyze_with_pythonocc(input_path, density, unit_factor)
 
     if result is None:
         output = empty_output()
@@ -95,6 +104,8 @@ async def analyze_cad(
     )
     if materiale:
         result["materiale"] = materiale
+    if density is not None:
+        result["density_g_cm3"] = density
     return JSONResponse(content=result)
 
 
@@ -118,10 +129,15 @@ def analyze_with_freecad(
         bbox = shape.BoundBox
         volume_cm3 = convert_volume_mm3_to_cm3(float(shape.Volume), unit_factor)
         surface_area_cm2 = convert_area_mm2_to_cm2(float(shape.Area), unit_factor)
-        holes = detect_cylindrical_holes(shape, unit_factor)
-        flanges = detect_bend_candidates(shape, holes, unit_factor)
+        feature_result = detect_hole_features(shape, unit_factor)
+        flanges = detect_bend_candidates(shape, feature_result["circular_holes"], unit_factor)
         thickness = estimate_sheet_thickness(shape, unit_factor)
         faces_count = len(shape.Faces)
+        holes = (
+            feature_result["circular_holes"]
+            + feature_result["elongated_holes"]
+            + feature_result["polygonal_holes"]
+        )
     except Exception as exc:
         output["warnings"].append(f"FreeCAD analysis failed: {exc}")
         return output
@@ -138,15 +154,20 @@ def analyze_with_freecad(
             "estimated_weight_kg": estimate_weight(volume_cm3, density_g_cm3),
             "holes_count": feature_count(holes),
             "holes": holes,
+            "features": {
+                "circular_holes": feature_result["circular_holes"],
+                "elongated_holes": feature_result["elongated_holes"],
+                "polygonal_holes": feature_result["polygonal_holes"],
+                "flanges": flanges,
+            },
             "bends_count": feature_count(flanges),
             "flanges": flanges,
             "thickness_mm": thickness["thickness_mm"],
             "complexity_score": score_complexity(faces_count, feature_count(holes), bool(flanges)),
         }
     )
+    output["warnings"].extend(feature_result["warnings"])
     output["warnings"].extend(thickness["warnings"])
-    if not holes:
-        output["warnings"].append("No circular holes were deducible from STEP cylindrical faces.")
     if not flanges:
         output["warnings"].append("No bends/flanges were deducible from STEP geometry.")
     return output
@@ -230,9 +251,13 @@ def analyze_with_pythonocc(
     return output
 
 
-def detect_cylindrical_holes(shape: Any, unit_factor: float) -> list[dict[str, Any]]:
-    holes: list[dict[str, Any]] = []
+def detect_hole_features(shape: Any, unit_factor: float) -> dict[str, Any]:
+    circular_holes: list[dict[str, Any]] = []
+    elongated_holes: list[dict[str, Any]] = []
+    polygonal_holes: list[dict[str, Any]] = []
+    warnings: list[str] = []
     seen: set[tuple[float, float, float, float]] = set()
+
     for face in getattr(shape, "Faces", []):
         surface = getattr(face, "Surface", None)
         radius = getattr(surface, "Radius", None)
@@ -252,7 +277,7 @@ def detect_cylindrical_holes(shape: Any, unit_factor: float) -> list[dict[str, A
         if key in seen:
             continue
         seen.add(key)
-        holes.append(
+        circular_holes.append(
             {
                 "type": "circular_hole_candidate",
                 "count": 1,
@@ -261,7 +286,93 @@ def detect_cylindrical_holes(shape: Any, unit_factor: float) -> list[dict[str, A
                 "source": "FreeCAD cylindrical face",
             }
         )
-    return group_by_metric(holes, "diameter_mm")
+
+    for wire in iter_shape_wires(shape):
+        polygon_result = classify_polygonal_wire(wire, unit_factor)
+        if polygon_result is not None:
+            polygonal_holes.append(polygon_result)
+            continue
+        elongated_result = classify_elongated_wire(wire, unit_factor)
+        if elongated_result is not None:
+            elongated_holes.append(elongated_result)
+
+    circular_holes = group_by_metric(circular_holes, "diameter_mm")
+    elongated_holes = group_by_metric(elongated_holes, "length_mm")
+    polygonal_holes = group_by_metric(polygonal_holes, "size_mm")
+
+    if not circular_holes:
+        warnings.append("No circular holes were deducible from STEP cylindrical faces.")
+    if not elongated_holes:
+        warnings.append("No elongated holes were deducible from closed wire geometry.")
+    if not polygonal_holes:
+        warnings.append("No polygonal holes were deducible from closed wire geometry.")
+    if elongated_holes or polygonal_holes:
+        warnings.append(
+            "Elongated/polygonal holes are low-confidence closed-wire candidates; validate against ground truth."
+        )
+
+    return {
+        "circular_holes": circular_holes,
+        "elongated_holes": elongated_holes,
+        "polygonal_holes": polygonal_holes,
+        "warnings": warnings,
+    }
+
+
+def iter_shape_wires(shape: Any) -> list[Any]:
+    wires = []
+    for face in getattr(shape, "Faces", []):
+        wires.extend(getattr(face, "Wires", []) or [])
+    return wires
+
+
+def classify_elongated_wire(wire: Any, unit_factor: float) -> dict[str, Any] | None:
+    edges = getattr(wire, "Edges", []) or []
+    if len(edges) < 4:
+        return None
+    circle_edges = 0
+    line_edges = 0
+    for edge in edges:
+        curve_name = edge.Curve.__class__.__name__.lower()
+        if "circle" in curve_name or "arc" in curve_name:
+            circle_edges += 1
+        if "line" in curve_name:
+            line_edges += 1
+    if circle_edges < 2 or line_edges < 2:
+        return None
+    length_mm = float(getattr(wire, "Length", 0.0) or 0.0) * unit_factor
+    if length_mm <= 0:
+        return None
+    return {
+        "type": "elongated_hole_candidate",
+        "count": 1,
+        "length_mm": round_number(length_mm / 2.0),
+        "confidence": "low",
+        "source": "FreeCAD closed wire arc/line mix",
+    }
+
+
+def classify_polygonal_wire(wire: Any, unit_factor: float) -> dict[str, Any] | None:
+    edges = getattr(wire, "Edges", []) or []
+    if len(edges) < 3:
+        return None
+    line_edges = 0
+    for edge in edges:
+        curve_name = edge.Curve.__class__.__name__.lower()
+        if "line" in curve_name:
+            line_edges += 1
+    if line_edges != len(edges):
+        return None
+    length_mm = float(getattr(wire, "Length", 0.0) or 0.0) * unit_factor
+    if length_mm <= 0:
+        return None
+    return {
+        "type": "polygonal_hole_candidate",
+        "count": 1,
+        "size_mm": round_number(length_mm / max(1, len(edges))),
+        "confidence": "low",
+        "source": "FreeCAD closed wire with linear edges",
+    }
 
 
 def detect_bend_candidates(
@@ -306,12 +417,16 @@ def estimate_sheet_thickness(shape: Any, unit_factor: float) -> dict[str, Any]:
     distances: list[float] = []
     for index, first in enumerate(planar_faces):
         for second in planar_faces[index + 1 :]:
+            if not are_parallel_planes(first, second):
+                continue
+            if not are_similar_large_faces(first, second):
+                continue
             try:
                 distance = float(first.distToShape(second)[0]) * unit_factor
             except Exception:
                 continue
-            if math.isfinite(distance) and 0.1 <= distance <= 20:
-                distances.append(round(distance, 1))
+            if math.isfinite(distance) and 0.4 <= distance <= 8:
+                distances.append(round(distance, 2))
 
     if not distances:
         return {
@@ -321,17 +436,52 @@ def estimate_sheet_thickness(shape: Any, unit_factor: float) -> dict[str, Any]:
 
     buckets: dict[float, int] = {}
     for distance in distances:
-        buckets[distance] = buckets.get(distance, 0) + 1
+        bucket = round(distance * 2.0) / 2.0
+        buckets[bucket] = buckets.get(bucket, 0) + 1
     thickness, count = max(buckets.items(), key=lambda item: item[1])
-    if count < 2:
+    sorted_counts = sorted(buckets.values(), reverse=True)
+    ambiguous = len(sorted_counts) > 1 and sorted_counts[1] >= count * 0.75
+    if count < 2 or ambiguous:
         return {
             "thickness_mm": None,
-            "warnings": ["Sheet thickness candidates were too weak to report."],
+            "warnings": [
+                "Sheet thickness candidates were ambiguous; returning null instead of a likely wrong value."
+            ],
+        }
+    if thickness > 3.0 and any(abs(candidate - thickness / 2.0) <= 0.3 for candidate in buckets):
+        return {
+            "thickness_mm": None,
+            "warnings": [
+                "Sheet thickness candidate may be a doubled offset; returning null pending CAD validation."
+            ],
         }
     return {
         "thickness_mm": round_number(thickness),
-        "warnings": ["Sheet thickness is estimated from repeated planar face offsets."],
+        "warnings": ["Sheet thickness is estimated from dominant nearby parallel planar faces."],
     }
+
+
+def are_parallel_planes(first: Any, second: Any) -> bool:
+    try:
+        first_axis = first.Surface.Axis.Direction
+        second_axis = second.Surface.Axis.Direction
+        dot = abs(
+            float(first_axis.x) * float(second_axis.x)
+            + float(first_axis.y) * float(second_axis.y)
+            + float(first_axis.z) * float(second_axis.z)
+        )
+    except Exception:
+        return False
+    return dot >= 0.995
+
+
+def are_similar_large_faces(first: Any, second: Any) -> bool:
+    first_area = float(getattr(first, "Area", 0.0) or 0.0)
+    second_area = float(getattr(second, "Area", 0.0) or 0.0)
+    if first_area <= 50 or second_area <= 50:
+        return False
+    ratio = min(first_area, second_area) / max(first_area, second_area)
+    return ratio >= 0.65
 
 
 def group_by_metric(features: list[dict[str, Any]], metric_key: str) -> list[dict[str, Any]]:
@@ -365,6 +515,35 @@ def estimate_weight(volume_cm3: float | None, density_g_cm3: float | None) -> fl
     if volume_cm3 is None or density_g_cm3 is None or density_g_cm3 < 0:
         return None
     return round_number(volume_cm3 * density_g_cm3 / 1000.0)
+
+
+def resolve_density(
+    density_g_cm3: float | None,
+    materiale: str | None,
+    notes: str | None,
+) -> float | None:
+    if density_g_cm3 is not None and density_g_cm3 >= 0:
+        return density_g_cm3
+    for text in [materiale, notes]:
+        parsed = parse_density_from_text(text or "")
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def parse_density_from_text(text: str) -> float | None:
+    patterns = [
+        r"(?:density|densita|densità)\s*[:=]?\s*([0-9]+(?:[.,][0-9]+)?)\s*(?:g\s*/\s*cm3|g\s*/\s*cm\^3|g/cm3|g/cm\^3)",
+        r"([0-9]+(?:[.,][0-9]+)?)\s*(?:g\s*/\s*cm3|g\s*/\s*cm\^3|g/cm3|g/cm\^3)",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if not match:
+            continue
+        value = float(match.group(1).replace(",", "."))
+        if 0 <= value <= 30:
+            return value
+    return None
 
 
 def score_complexity(face_count: int, holes_count: int, has_bends: bool) -> str:

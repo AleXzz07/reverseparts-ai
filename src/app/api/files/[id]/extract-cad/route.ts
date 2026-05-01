@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { isStepFile } from "@/lib/files";
 import { createClient } from "@/lib/supabase/server";
-import type { ComponentFile } from "@/lib/types";
+import type { ComponentFile, ComponentProject } from "@/lib/types";
 
 const MAX_CAD_FILE_BYTES = 80 * 1024 * 1024;
 const VERCEL_STP_FALLBACK_MESSAGE =
@@ -67,8 +67,20 @@ export async function POST(
     return NextResponse.json({ status: "failed", message });
   }
 
+  const { data: component } = await supabase
+    .from("components")
+    .select("notes")
+    .eq("id", componentFile.component_id)
+    .eq("user_id", user.id)
+    .single();
+
   try {
-    const extractedData = await sendToCadAnalysisApi(apiUrl, componentFile, data);
+    const extractedData = await sendToCadAnalysisApi(
+      apiUrl,
+      componentFile,
+      data,
+      (component as Pick<ComponentProject, "notes"> | null)?.notes ?? "",
+    );
 
     const { error: upsertError } = await supabase.from("cad_feature_extractions").upsert(
       {
@@ -99,11 +111,15 @@ async function sendToCadAnalysisApi(
   apiUrl: string,
   file: ComponentFile,
   data: Blob,
+  notes: string,
 ) {
   const formData = new FormData();
   formData.append("file", data, file.file_name);
   formData.append("component_file_id", file.id);
   formData.append("component_id", file.component_id);
+  if (notes.trim()) {
+    formData.append("notes", notes);
+  }
 
   const response = await fetch(apiUrl, {
     method: "POST",

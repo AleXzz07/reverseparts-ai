@@ -12,6 +12,7 @@ Input `multipart/form-data`:
 - `materiale`: opzionale
 - `density_g_cm3`: opzionale
 - `unit`: opzionale, uno tra `mm`, `cm`, `m`, `inch`
+- `notes`: opzionale, usato anche per estrarre densita' testuali come `densita 2.70 g/cm3`
 
 ## Output
 
@@ -94,3 +95,13 @@ Se Render mostra ancora `FreeCAD/OpenCascade non disponibile`, controlla i log d
 - Non inventa dati tecnici.
 - Feature non deducibili restano `null`, `[]` o nei `warnings`.
 - STP/STEP e' la fonte tecnica primaria; PDF/expected output restano ground truth di confronto.
+
+## Debug STAFFA TEST 1-1
+
+Per confrontare un output CAD locale con la ground truth:
+
+```bash
+python debug_staffa_test.py path/to/cad_output.json
+```
+
+Il report mostra delta dimensioni, errore su spessore/peso e differenze nei conteggi fori/flange. Non forza mai valori del PDF nel risultato CAD.

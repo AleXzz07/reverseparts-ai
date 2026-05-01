@@ -24,6 +24,52 @@
       "source": "FreeCAD cylindrical face"
     }
   ],
+  "features": {
+    "circular_holes": [
+      {
+        "type": "circular_hole_candidate",
+        "count": 2,
+        "diameter_mm": 6.99,
+        "confidence": "low",
+        "source": "FreeCAD cylindrical face"
+      },
+      {
+        "type": "circular_hole_candidate",
+        "count": 2,
+        "diameter_mm": 4.99,
+        "confidence": "low",
+        "source": "FreeCAD cylindrical face"
+      }
+    ],
+    "elongated_holes": [
+      {
+        "type": "elongated_hole_candidate",
+        "count": 2,
+        "length_mm": 51.37,
+        "confidence": "low",
+        "source": "FreeCAD closed wire arc/line mix"
+      }
+    ],
+    "polygonal_holes": [
+      {
+        "type": "polygonal_hole_candidate",
+        "count": 2,
+        "size_mm": 27.71,
+        "confidence": "low",
+        "source": "FreeCAD closed wire with linear edges"
+      }
+    ],
+    "flanges": [
+      {
+        "type": "bend_or_flange_candidate",
+        "count": 2,
+        "radius_mm": null,
+        "length_mm": null,
+        "confidence": "low",
+        "source": "FreeCAD cylindrical non-hole face"
+      }
+    ]
+  },
   "bends_count": 2,
   "flanges": [
     {
