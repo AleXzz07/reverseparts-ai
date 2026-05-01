@@ -246,7 +246,8 @@ function formatCadFeaturesForPrompt(extractions: CadFeatureExtraction[]) {
 
       return [
         `CAD ${index + 1} (${data.file_type}):`,
-        `- dimensioni X/Y/Z: ${formatNullableVector(data.dimensions_mm)}`,
+        `- dimensioni effettive X/Y/Z: ${formatNullableVector(data.effective_dimensions_mm ?? data.dimensions_mm)}`,
+        `- bounding box grezza X/Y/Z: ${formatNullableVector(data.raw_bounding_box_mm ?? data.dimensions_mm)}`,
         `- volume: ${formatNumber(data.volume_cm3)} cm3`,
         `- area: ${formatNumber(data.surface_area_cm2)} cm2`,
         `- spessore lamiera: ${formatNumber(data.thickness_mm)} mm`,

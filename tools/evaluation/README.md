@@ -18,6 +18,7 @@ The report is emitted as JSON and includes:
 - different fields;
 - percentage error for dimensions, weight, thickness and blank data;
 - hole/flange recognition precision;
+- score breakdown for dimensions, thickness, holes and flanges;
 - CAD extraction accuracy score from `0` to `100`.
 
 ## Usage
@@ -27,6 +28,12 @@ python tools/evaluation/evaluate.py \
   tools/cad_feature_extractor/sample_output.json \
   dataset_examples/pezzo_001_staffa_test/expected_output.json \
   --pretty
+```
+
+Shortcut for STAFFA TEST 1-1:
+
+```bash
+python tools/evaluation/evaluate.py cad_output.json --staffa-test --pretty
 ```
 
 Write the report to a file:

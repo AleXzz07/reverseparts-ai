@@ -17,6 +17,13 @@ NUMERIC_FIELDS = [
     "blank_perimeter_mm",
 ]
 
+DEFAULT_STAFFA_EXPECTED = (
+    Path(__file__).resolve().parents[2]
+    / "dataset_examples"
+    / "pezzo_001_staffa_test"
+    / "expected_output.json"
+)
+
 
 def load_json(path: Path) -> dict[str, Any]:
     with path.open("r", encoding="utf-8") as file:
@@ -133,7 +140,10 @@ def normalize_extracted(data: dict[str, Any]) -> dict[str, Any]:
         "part_name": data.get("part_name", ""),
         "material": data.get("material", ""),
         "thickness_mm": as_number(data.get("thickness_mm")),
-        "dimensions_mm": normalize_dimensions(data.get("dimensions_mm"), ("x", "y", "z")),
+        "dimensions_mm": normalize_dimensions(
+            data.get("effective_dimensions_mm") or data.get("dimensions_mm"),
+            ("x", "y", "z"),
+        ),
         "part_weight_kg": first_number(data, ["part_weight_kg", "estimated_weight_kg"]),
         "blank_size_mm": normalize_dimensions(data.get("blank_size_mm"), ("x", "y")),
         "blank_weight_kg": as_number(data.get("blank_weight_kg")),
@@ -264,6 +274,52 @@ def compare_features(
     overall_actual = sum(group_total(groups) for groups in actual.values())
     report["overall"] = feature_precision(overall_expected, overall_actual)
     return report
+
+
+def score_from_errors(errors: dict[str, float | None], tolerance_percent: float) -> int:
+    valid = [error for error in errors.values() if error is not None]
+    if len(valid) != len(errors):
+        return 0
+    if not valid:
+        return 0
+    axis_scores = [max(0.0, 100.0 - (error / tolerance_percent * 100.0)) for error in valid]
+    return int(round(sum(axis_scores) / len(axis_scores)))
+
+
+def scalar_score(error: float | None, tolerance_percent: float) -> int:
+    if error is None:
+        return 0
+    return int(round(max(0.0, 100.0 - (error / tolerance_percent * 100.0))))
+
+
+def build_staffa_score_breakdown(
+    numeric_errors: dict[str, Any],
+    feature_report: dict[str, Any],
+) -> dict[str, Any]:
+    hole_feature_names = ["circular_holes", "elongated_holes", "polygonal_holes"]
+    hole_scores = [
+        float(feature_report.get(name, {}).get("f1", 0.0)) * 100.0
+        for name in hole_feature_names
+    ]
+    flange_score = float(feature_report.get("flanges", {}).get("f1", 0.0)) * 100.0
+    return {
+        "dimensions": {
+            "score": score_from_errors(numeric_errors.get("dimensions_mm", {}), 2.0),
+            "percentage_errors": numeric_errors.get("dimensions_mm", {}),
+        },
+        "thickness": {
+            "score": scalar_score(numeric_errors.get("thickness_mm"), 5.0),
+            "percentage_error": numeric_errors.get("thickness_mm"),
+        },
+        "holes": {
+            "score": int(round(sum(hole_scores) / len(hole_scores))) if hole_scores else 0,
+            "details": {name: feature_report.get(name, {}) for name in hole_feature_names},
+        },
+        "flanges": {
+            "score": int(round(flange_score)),
+            "details": feature_report.get("flanges", {}),
+        },
+    }
 
 
 def score_report(
@@ -406,6 +462,7 @@ def evaluate(expected_data: dict[str, Any], actual_data: dict[str, Any]) -> dict
         "different_fields": different_fields,
         "percentage_errors": numeric_errors,
         "feature_precision": feature_report,
+        "score_breakdown": build_staffa_score_breakdown(numeric_errors, feature_report),
         "cad_accuracy_score": final_score,
         "final_score": final_score,
     }
@@ -416,7 +473,12 @@ def main() -> int:
         description="Compare CAD extractor JSON with REVERSEPARTS ground truth."
     )
     parser.add_argument("cad_output_json", type=Path, help="CAD extractor output JSON path.")
-    parser.add_argument("expected_json", type=Path, help="Ground truth JSON path.")
+    parser.add_argument("expected_json", type=Path, nargs="?", help="Ground truth JSON path.")
+    parser.add_argument(
+        "--staffa-test",
+        action="store_true",
+        help="Evaluate against dataset_examples/pezzo_001_staffa_test/expected_output.json.",
+    )
     parser.add_argument(
         "-o",
         "--output",
@@ -427,7 +489,11 @@ def main() -> int:
     parser.add_argument("--pretty", action="store_true", help="Print indented JSON.")
     args = parser.parse_args()
 
-    report = evaluate(load_json(args.expected_json), load_json(args.cad_output_json))
+    expected_path = DEFAULT_STAFFA_EXPECTED if args.staffa_test else args.expected_json
+    if expected_path is None:
+        parser.error("expected_json is required unless --staffa-test is provided.")
+
+    report = evaluate(load_json(expected_path), load_json(args.cad_output_json))
     serialized = json.dumps(report, ensure_ascii=False, indent=2 if args.pretty else None)
     if args.output:
         args.output.write_text(serialized + "\n", encoding="utf-8")

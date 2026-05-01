@@ -53,6 +53,11 @@ function CadExtractionCard({
   const holeStatus = canUseStepHoleDetection
     ? formatMaybeNumber(data.holes_count)
     : "rilevamento non affidabile";
+  const rawBoundingBox = data.raw_bounding_box_mm ?? data.dimensions_mm;
+  const effectiveDimensions = data.effective_dimensions_mm ?? data.dimensions_mm;
+  const debugMessages = [
+    `Candidati foro grezzi: ${formatMaybeNumber(data.holes_debug_candidates_count ?? null)}`,
+  ];
 
   return (
     <article className="rounded-lg border border-[var(--line)] bg-[#faf9f5] p-4">
@@ -69,14 +74,14 @@ function CadExtractionCard({
       </div>
 
       <dl className="grid gap-3 text-sm sm:grid-cols-2">
-        <Field label="Dimensioni X/Y/Z" value={formatDimensions(data.dimensions_mm)} />
+        <Field label="Dimensioni effettive" value={formatDimensions(effectiveDimensions)} />
+        <Field label="Bounding box grezza" value={formatDimensions(rawBoundingBox)} />
         <Field label="Volume" value={formatNumber(data.volume_cm3, "cm3")} />
         <Field label="Area" value={formatNumber(data.surface_area_cm2, "cm2")} />
         <Field label="Peso stimato" value={formatNumber(data.estimated_weight_kg, "kg")} />
         <Field label="Spessore lamiera" value={formatNumber(data.thickness_mm, "mm")} />
         <Field label="Fori" value={holeStatus} />
         <Field label="Confidenza fori" value={data.holes_detection_confidence ?? "n/d"} />
-        <Field label="Candidati debug" value={formatMaybeNumber(data.holes_debug_candidates_count ?? null)} />
         {canUseStepHoleDetection ? (
           <>
             <Field label="Fori circolari" value={formatGroups(data.features?.circular_holes ?? [], "diameter_mm")} />
@@ -85,6 +90,7 @@ function CadExtractionCard({
           </>
         ) : null}
         <Field label="Flange/pieghe" value={formatGroups(data.features?.flanges ?? data.flanges, "length_mm")} />
+        <Field label="Conteggio flange" value={formatMaybeNumber(data.flanges_count ?? data.bends_count)} />
       </dl>
 
       {!canUseStepHoleDetection ? (
@@ -98,6 +104,10 @@ function CadExtractionCard({
           {data.warnings.join(" ")}
         </div>
       ) : null}
+
+      <div className="mt-4 rounded-md border border-[var(--line)] bg-white p-3 text-xs leading-5 text-[var(--muted)]">
+        {debugMessages.join(" ")}
+      </div>
     </article>
   );
 }

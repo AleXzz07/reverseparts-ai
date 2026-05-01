@@ -109,6 +109,8 @@ export type CadFeatureExtraction = {
 export type CadFeatureData = {
   file_type: string;
   dimensions_mm: { x: number | null; y: number | null; z: number | null };
+  raw_bounding_box_mm?: { x: number | null; y: number | null; z: number | null };
+  effective_dimensions_mm?: { x: number | null; y: number | null; z: number | null } | null;
   volume_cm3: number | null;
   surface_area_cm2: number | null;
   estimated_weight_kg: number | null;
@@ -122,6 +124,7 @@ export type CadFeatureData = {
     polygonal_holes: CadFeatureGroup[];
     flanges: CadFeatureGroup[];
   };
+  flanges_count?: number | null;
   bends_count: number | null;
   flanges: CadFeatureGroup[];
   thickness_mm: number | null;

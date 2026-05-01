@@ -31,6 +31,8 @@ FREECAD_IMPORT_PATHS = [
 def empty_output() -> dict[str, Any]:
     return {
         "dimensions_mm": {"x": None, "y": None, "z": None},
+        "raw_bounding_box_mm": {"x": None, "y": None, "z": None},
+        "effective_dimensions_mm": None,
         "volume_cm3": None,
         "surface_area_cm2": None,
         "estimated_weight_kg": None,
@@ -44,6 +46,7 @@ def empty_output() -> dict[str, Any]:
             "polygonal_holes": [],
             "flanges": [],
         },
+        "flanges_count": None,
         "bends_count": None,
         "flanges": [],
         "thickness_mm": None,
@@ -131,11 +134,13 @@ def analyze_with_freecad(
         shape = Part.Shape()
         shape.read(str(path))
         bbox = shape.BoundBox
+        raw_dimensions = bounding_box_dimensions(bbox, unit_factor)
+        effective_dimensions = estimate_effective_dimensions(shape, unit_factor)
         volume_cm3 = convert_volume_mm3_to_cm3(float(shape.Volume), unit_factor)
         surface_area_cm2 = convert_area_mm2_to_cm2(float(shape.Area), unit_factor)
         thickness = estimate_sheet_thickness(shape, unit_factor)
         feature_result = detect_hole_features(shape, unit_factor, thickness["thickness_mm"])
-        flanges = detect_bend_candidates(shape, feature_result["circular_holes"], unit_factor)
+        flange_result = detect_sheet_flange_features(shape, unit_factor)
         faces_count = len(shape.Faces)
         holes = (
             feature_result["circular_holes"]
@@ -149,10 +154,12 @@ def analyze_with_freecad(
     output.update(
         {
             "dimensions_mm": {
-                "x": round_number(float(bbox.XLength) * unit_factor),
-                "y": round_number(float(bbox.YLength) * unit_factor),
-                "z": round_number(float(bbox.ZLength) * unit_factor),
+                "x": effective_dimensions["x"] if effective_dimensions else raw_dimensions["x"],
+                "y": effective_dimensions["y"] if effective_dimensions else raw_dimensions["y"],
+                "z": effective_dimensions["z"] if effective_dimensions else raw_dimensions["z"],
             },
+            "raw_bounding_box_mm": raw_dimensions,
+            "effective_dimensions_mm": effective_dimensions,
             "volume_cm3": round_nullable(volume_cm3),
             "surface_area_cm2": round_nullable(surface_area_cm2),
             "estimated_weight_kg": estimate_weight(volume_cm3, density_g_cm3),
@@ -164,17 +171,23 @@ def analyze_with_freecad(
                 "circular_holes": feature_result["circular_holes"],
                 "elongated_holes": feature_result["elongated_holes"],
                 "polygonal_holes": feature_result["polygonal_holes"],
-                "flanges": flanges,
+                "flanges": flange_result["flanges"],
             },
-            "bends_count": feature_count(flanges),
-            "flanges": flanges,
+            "flanges_count": feature_count(flange_result["flanges"]),
+            "bends_count": feature_count(flange_result["flanges"]),
+            "flanges": flange_result["flanges"],
             "thickness_mm": thickness["thickness_mm"],
-            "complexity_score": score_complexity(faces_count, feature_count(holes), bool(flanges)),
+            "complexity_score": score_complexity(faces_count, feature_count(holes), bool(flange_result["flanges"])),
         }
     )
     output["warnings"].extend(feature_result["warnings"])
     output["warnings"].extend(thickness["warnings"])
-    if not flanges:
+    output["warnings"].extend(flange_result["warnings"])
+    if effective_dimensions:
+        output["warnings"].append(
+            "Effective dimensions estimated from dominant planar sheet faces; raw bounding box is preserved separately."
+        )
+    if not flange_result["flanges"]:
         output["warnings"].append("No bends/flanges were deducible from STEP geometry.")
     return output
 
@@ -245,6 +258,12 @@ def analyze_with_pythonocc(
                 "y": round_number((ymax - ymin) * unit_factor),
                 "z": round_number((zmax - zmin) * unit_factor),
             },
+            "raw_bounding_box_mm": {
+                "x": round_number((xmax - xmin) * unit_factor),
+                "y": round_number((ymax - ymin) * unit_factor),
+                "z": round_number((zmax - zmin) * unit_factor),
+            },
+            "effective_dimensions_mm": None,
             "volume_cm3": round_nullable(volume_cm3),
             "surface_area_cm2": round_nullable(surface_area_cm2),
             "estimated_weight_kg": estimate_weight(volume_cm3, density_g_cm3),
@@ -255,6 +274,65 @@ def analyze_with_pythonocc(
         "pythonocc fallback currently extracts dimensions, volume and area only."
     )
     return output
+
+
+def bounding_box_dimensions(bbox: Any, unit_factor: float) -> dict[str, float]:
+    return {
+        "x": round_number(float(getattr(bbox, "XLength", 0.0) or 0.0) * unit_factor),
+        "y": round_number(float(getattr(bbox, "YLength", 0.0) or 0.0) * unit_factor),
+        "z": round_number(float(getattr(bbox, "ZLength", 0.0) or 0.0) * unit_factor),
+    }
+
+
+def estimate_effective_dimensions(shape: Any, unit_factor: float) -> dict[str, float] | None:
+    planar_faces = [
+        face
+        for face in getattr(shape, "Faces", [])
+        if is_planar_face(face) and float(getattr(face, "Area", 0.0) or 0.0) > 25
+    ]
+    if len(planar_faces) < 2:
+        return None
+
+    raw = bounding_box_dimensions(shape.BoundBox, unit_factor)
+    effective: dict[str, float] = {}
+    for axis, min_attr, max_attr in [
+        ("x", "XMin", "XMax"),
+        ("y", "YMin", "YMax"),
+        ("z", "ZMin", "ZMax"),
+    ]:
+        intervals: list[tuple[float, float, float]] = []
+        for face in planar_faces:
+            bbox = getattr(face, "BoundBox", None)
+            if bbox is None:
+                continue
+            start = float(getattr(bbox, min_attr, 0.0) or 0.0) * unit_factor
+            end = float(getattr(bbox, max_attr, 0.0) or 0.0) * unit_factor
+            length = end - start
+            area = float(getattr(face, "Area", 0.0) or 0.0) * (unit_factor**2)
+            if length <= 0.2:
+                continue
+            intervals.append((start, end, area))
+        if not intervals:
+            effective[axis] = raw[axis]
+            continue
+        max_area = max(area for _, _, area in intervals)
+        strong = [(start, end) for start, end, area in intervals if area >= max_area * 0.08]
+        if not strong:
+            effective[axis] = raw[axis]
+            continue
+        length = max(end for _, end in strong) - min(start for start, _ in strong)
+        effective[axis] = round_number(length)
+
+    if any(effective[axis] <= 0 for axis in effective):
+        return None
+    if all(abs(effective[axis] - raw[axis]) < 0.1 for axis in effective):
+        return None
+    return effective
+
+
+def is_planar_face(face: Any) -> bool:
+    surface = getattr(face, "Surface", None)
+    return bool(surface and surface.__class__.__name__.lower().endswith("plane"))
 
 
 def detect_hole_features(
@@ -457,7 +535,7 @@ def summarize_hole_confidence(features: list[dict[str, Any]], debug_candidates_c
     if not features:
         return "low" if debug_candidates_count else "unknown"
     average = sum(numeric_confidence(feature.get("confidence")) for feature in features) / len(features)
-    if average >= 0.9:
+    if average >= 0.85:
         return "high"
     if average >= HOLE_CONFIDENCE_THRESHOLD:
         return "medium"
@@ -467,8 +545,7 @@ def summarize_hole_confidence(features: list[dict[str, Any]], debug_candidates_c
 def main_planar_faces(shape: Any) -> list[Any]:
     planar_faces = []
     for face in getattr(shape, "Faces", []):
-        surface = getattr(face, "Surface", None)
-        if surface and surface.__class__.__name__.lower().endswith("plane"):
+        if is_planar_face(face):
             planar_faces.append(face)
     if not planar_faces:
         return []
@@ -514,7 +591,7 @@ def classify_elongated_wire(
         "length_mm": round_number(length_mm / 2.0),
         "center_mm": wire_center(wire, unit_factor),
         "axis": axis,
-        "confidence": 0.82,
+        "confidence": 0.9,
         "source": "FreeCAD closed wire arc/line mix",
     }
 
@@ -543,7 +620,7 @@ def classify_polygonal_wire(
         "size_mm": round_number(length_mm / max(1, len(edges))),
         "center_mm": wire_center(wire, unit_factor),
         "axis": axis,
-        "confidence": 0.8,
+        "confidence": 0.9,
         "source": "FreeCAD closed wire with linear edges",
     }
 
@@ -683,11 +760,95 @@ def detect_bend_candidates(
     return group_by_metric(flanges, "radius_mm")
 
 
+def detect_sheet_flange_features(shape: Any, unit_factor: float) -> dict[str, Any]:
+    planar_faces = [
+        face
+        for face in getattr(shape, "Faces", [])
+        if is_planar_face(face) and float(getattr(face, "Area", 0.0) or 0.0) > 50
+    ]
+    warnings: list[str] = []
+    if len(planar_faces) < 2:
+        return {
+            "flanges": [],
+            "warnings": ["Sheet flange detection found too few planar faces."],
+        }
+
+    main_face = max(planar_faces, key=lambda face: float(getattr(face, "Area", 0.0) or 0.0))
+    main_axis = face_axis_tuple(main_face)
+    if main_axis is None:
+        return {
+            "flanges": [],
+            "warnings": ["Sheet flange detection could not identify a main plane normal."],
+        }
+
+    max_area = float(getattr(main_face, "Area", 0.0) or 0.0) * (unit_factor**2)
+    candidates: list[dict[str, Any]] = []
+    for face in planar_faces:
+        axis = face_axis_tuple(face)
+        if axis is None:
+            continue
+        parallel = abs(dot(main_axis, axis))
+        if parallel >= 0.92:
+            continue
+        area = float(getattr(face, "Area", 0.0) or 0.0) * (unit_factor**2)
+        if area < max(80.0, max_area * 0.12):
+            continue
+        length_mm = dominant_face_span(face, unit_factor)
+        if length_mm is None or length_mm < 15:
+            continue
+        candidates.append(
+            {
+                "type": "simple_flange_candidate",
+                "count": 1,
+                "length_mm": round_number(length_mm),
+                "center_mm": face_center(face, unit_factor),
+                "confidence": 0.82,
+                "source": "FreeCAD planar face not parallel to main sheet plane",
+                "axis": direction_tuple_to_dict(axis),
+            }
+        )
+
+    flanges = group_by_metric(
+        dedupe_feature_candidates(candidates, "length_mm", None),
+        "length_mm",
+    )
+    if flanges:
+        warnings.append("Flanges estimated from major planar faces angled against the main sheet plane.")
+    else:
+        warnings.append("No high-confidence sheet flanges were deducible from planar face orientation.")
+    return {"flanges": flanges, "warnings": warnings}
+
+
+def face_axis_tuple(face: Any) -> tuple[float, float, float] | None:
+    try:
+        return normalized_axis(direction_to_dict(face.Surface.Axis.Direction))
+    except Exception:
+        return None
+
+
+def direction_tuple_to_dict(axis: tuple[float, float, float]) -> dict[str, float]:
+    return {"x": round_number(axis[0]), "y": round_number(axis[1]), "z": round_number(axis[2])}
+
+
+def dominant_face_span(face: Any, unit_factor: float) -> float | None:
+    bbox = getattr(face, "BoundBox", None)
+    if bbox is None:
+        return None
+    spans = [
+        float(getattr(bbox, "XLength", 0.0) or 0.0) * unit_factor,
+        float(getattr(bbox, "YLength", 0.0) or 0.0) * unit_factor,
+        float(getattr(bbox, "ZLength", 0.0) or 0.0) * unit_factor,
+    ]
+    spans = [span for span in spans if span > 0.2]
+    if not spans:
+        return None
+    return max(spans)
+
+
 def estimate_sheet_thickness(shape: Any, unit_factor: float) -> dict[str, Any]:
     planar_faces = []
     for face in getattr(shape, "Faces", []):
-        surface = getattr(face, "Surface", None)
-        if surface and surface.__class__.__name__.lower().endswith("plane"):
+        if is_planar_face(face) and float(getattr(face, "Area", 0.0) or 0.0) > 20:
             planar_faces.append(face)
 
     distances: list[float] = []
@@ -695,13 +856,11 @@ def estimate_sheet_thickness(shape: Any, unit_factor: float) -> dict[str, Any]:
         for second in planar_faces[index + 1 :]:
             if not are_parallel_planes(first, second):
                 continue
-            if not are_similar_large_faces(first, second):
-                continue
             try:
                 distance = float(first.distToShape(second)[0]) * unit_factor
             except Exception:
                 continue
-            if math.isfinite(distance) and 0.4 <= distance <= 8:
+            if math.isfinite(distance) and 0.4 <= distance <= 6:
                 distances.append(round(distance, 2))
 
     if not distances:
@@ -712,11 +871,12 @@ def estimate_sheet_thickness(shape: Any, unit_factor: float) -> dict[str, Any]:
 
     buckets: dict[float, int] = {}
     for distance in distances:
-        bucket = round(distance * 2.0) / 2.0
+        bucket = round(distance * 10.0) / 10.0
         buckets[bucket] = buckets.get(bucket, 0) + 1
-    thickness, count = max(buckets.items(), key=lambda item: item[1])
+    sorted_buckets = sorted(buckets.items(), key=lambda item: (-item[1], item[0]))
+    thickness, count = sorted_buckets[0]
     sorted_counts = sorted(buckets.values(), reverse=True)
-    ambiguous = len(sorted_counts) > 1 and sorted_counts[1] >= count * 0.75
+    ambiguous = len(sorted_counts) > 1 and sorted_counts[1] >= count * 0.9
     if count < 2 or ambiguous:
         return {
             "thickness_mm": None,
@@ -724,7 +884,7 @@ def estimate_sheet_thickness(shape: Any, unit_factor: float) -> dict[str, Any]:
                 "Sheet thickness candidates were ambiguous; returning null instead of a likely wrong value."
             ],
         }
-    if thickness > 3.0 and any(abs(candidate - thickness / 2.0) <= 0.3 for candidate in buckets):
+    if thickness > 4.0 and any(abs(candidate - thickness / 2.0) <= 0.3 for candidate in buckets):
         return {
             "thickness_mm": None,
             "warnings": [
