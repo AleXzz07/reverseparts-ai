@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import os
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,14 @@ app = FastAPI(title="REVERSEPARTS CAD Analysis API", version="0.1.0")
 
 STEP_EXTENSIONS = {".stp", ".step"}
 SUPPORTED_UNITS = {"mm": 1.0, "cm": 10.0, "m": 1000.0, "inch": 25.4}
+FREECAD_IMPORT_PATHS = [
+    os.environ.get("FREECAD_PYTHON_PATH"),
+    "/usr/lib/freecad/lib",
+    "/usr/lib/freecad/Ext",
+    "/usr/lib/freecad-python3/lib",
+    "/usr/lib/python3/dist-packages",
+    "/usr/local/lib/freecad/lib",
+]
 
 
 def empty_output() -> dict[str, Any]:
@@ -89,8 +98,11 @@ def analyze_with_freecad(
     unit_factor: float,
 ) -> dict[str, Any] | None:
     try:
+        configure_freecad_paths()
+        import FreeCAD  # type: ignore[import-not-found]  # noqa: F401
         import Part  # type: ignore[import-not-found]
-    except ImportError:
+    except ImportError as exc:
+        print(f"FreeCAD import failed: {exc}", file=sys.stderr)
         return None
 
     output = empty_output()
@@ -132,6 +144,15 @@ def analyze_with_freecad(
     if not flanges:
         output["warnings"].append("No bends/flanges were deducible from STEP geometry.")
     return output
+
+
+def configure_freecad_paths() -> None:
+    for candidate in FREECAD_IMPORT_PATHS:
+        if not candidate:
+            continue
+        path = Path(candidate)
+        if path.exists() and str(path) not in sys.path:
+            sys.path.append(str(path))
 
 
 def analyze_with_pythonocc(

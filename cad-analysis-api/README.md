@@ -38,6 +38,22 @@ docker build -t reverseparts-cad-analysis .
 docker run -p 8000:8000 reverseparts-cad-analysis
 ```
 
+Il Dockerfile usa `ubuntu:22.04` e installa:
+
+- `freecad`
+- `freecad-python3`
+- `python3-pivy`
+- `opencascade-tools` se disponibile nel repository apt
+
+Imposta inoltre:
+
+```bash
+FREECAD_PYTHON_PATH=/usr/lib/freecad/lib
+PYTHONPATH=/usr/lib/freecad/lib:/usr/lib/freecad/Ext:/usr/lib/python3/dist-packages
+```
+
+Durante la build esegue un controllo `import FreeCAD, Part`; se fallisce, la build fallisce invece di arrivare su Render con un container non funzionante.
+
 Configura poi l'app Next.js:
 
 ```bash
@@ -52,7 +68,10 @@ CAD_ANALYSIS_API_URL=https://tuo-backend.example.com/analyze-cad
 2. Usa Docker come environment.
 3. Root directory: `cad-analysis-api`.
 4. Health check: `/health`.
-5. Imposta l'URL pubblico in `CAD_ANALYSIS_API_URL` nell'app Vercel.
+5. Lascia che Render usi il `Dockerfile` della cartella.
+6. Imposta l'URL pubblico in `CAD_ANALYSIS_API_URL` nell'app Vercel, per esempio `https://reverseparts-cad.onrender.com/analyze-cad`.
+
+Se Render mostra ancora `FreeCAD/OpenCascade non disponibile`, controlla i log di build: il Dockerfile deve stampare `FreeCAD import OK`. Se non appare, il container non sta usando questo Dockerfile o l'immagine e' stata buildata da una root directory errata.
 
 ### Railway
 
