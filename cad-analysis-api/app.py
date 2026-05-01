@@ -42,8 +42,14 @@ def empty_output() -> dict[str, Any]:
 
 
 @app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+def health() -> dict[str, Any]:
+    freecad_available, freecad_error = check_freecad_import()
+    return {
+        "status": "ok",
+        "freecad_available": freecad_available,
+        "freecad_error": freecad_error,
+        "python_path": sys.path,
+    }
 
 
 @app.post("/analyze-cad")
@@ -153,6 +159,17 @@ def configure_freecad_paths() -> None:
         path = Path(candidate)
         if path.exists() and str(path) not in sys.path:
             sys.path.append(str(path))
+
+
+def check_freecad_import() -> tuple[bool, str | None]:
+    try:
+        configure_freecad_paths()
+        import FreeCAD  # type: ignore[import-not-found]  # noqa: F401
+        import Part  # type: ignore[import-not-found]  # noqa: F401
+    except Exception as exc:
+        return False, f"{exc.__class__.__name__}: {exc}"
+
+    return True, None
 
 
 def analyze_with_pythonocc(
