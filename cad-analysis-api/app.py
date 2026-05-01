@@ -815,6 +815,32 @@ def resolve_density(
 
 
 def parse_density_from_text(text: str) -> float | None:
+    density_label = r"(?:density|densit(?:a|à|Ã |a'))"
+    density_unit = (
+        r"(?:g\s*/\s*cm\s*(?:3|\^3|³)|"
+        r"g\s*cm\s*(?:-3|\^-3|−3)|"
+        r"g/cm3|g/cm\^3|g/cm³)"
+    )
+    explicit_density = re.search(
+        rf"{density_label}\s*[:=]?\s*([0-9]+(?:[.,][0-9]+)?)\s*{density_unit}",
+        text,
+        re.IGNORECASE,
+    )
+    if explicit_density:
+        value = float(explicit_density.group(1).replace(",", "."))
+        if 0 <= value <= 30:
+            return value
+
+    value_with_unit = re.search(
+        rf"([0-9]+(?:[.,][0-9]+)?)\s*{density_unit}",
+        text,
+        re.IGNORECASE,
+    )
+    if value_with_unit:
+        value = float(value_with_unit.group(1).replace(",", "."))
+        if 0 <= value <= 30:
+            return value
+
     patterns = [
         r"(?:density|densita|densità)\s*[:=]?\s*([0-9]+(?:[.,][0-9]+)?)\s*(?:g\s*/\s*cm3|g\s*/\s*cm\^3|g/cm3|g/cm\^3)",
         r"([0-9]+(?:[.,][0-9]+)?)\s*(?:g\s*/\s*cm3|g\s*/\s*cm\^3|g/cm3|g/cm\^3)",
